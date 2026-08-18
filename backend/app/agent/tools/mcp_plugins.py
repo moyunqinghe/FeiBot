@@ -103,3 +103,25 @@ class McpPluginManager:
         removed = self._remove_tools(name)
         self._status.pop(name, None)
         return existed_db or removed > 0
+
+    def disable(self, name: str) -> bool:
+        """停用:移出工具但保留配置。不存在返回 False。"""
+        if store.get_plugin(name) is None:
+            return False
+        self._remove_tools(name)
+        store.set_plugin_enabled(name, 0)
+        self._status[name] = "disabled"
+        return True
+
+    def enable(self, name: str) -> int:
+        """启用:重新 discover 并注册。不存在抛 PluginError。"""
+        row = store.get_plugin(name)
+        if row is None:
+            raise PluginError(f"插件不存在:{name}")
+        result = discover(json.loads(row["config_json"]))
+        self._remove_tools(name)
+        keys = self._register_tools(name, result.tools)
+        self._provenance[name] = keys
+        store.set_plugin_enabled(name, 1)
+        self._status[name] = f"ok, {len(keys)} tools"
+        return len(keys)

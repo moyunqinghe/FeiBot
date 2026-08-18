@@ -126,3 +126,30 @@ def test_install_idempotent_reinstall(manager, monkeypatch):
     manager.install("p1", {"transport": "http", "url": "http://x"})
     assert list(TOOL_REGISTRY) == ["p1__a"]
     assert len(store.list_plugins()) == 1
+
+
+def test_disable_keeps_record_removes_tools(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    assert manager.disable("p1") is True
+    assert "p1__a" not in TOOL_REGISTRY
+    row = store.get_plugin("p1")
+    assert row is not None and row["enabled"] == 0
+
+
+def test_disable_missing_returns_false(manager):
+    assert manager.disable("ghost") is False
+
+
+def test_enable_rediscovers_and_registers(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    manager.disable("p1")
+    assert manager.enable("p1") == 1
+    assert "p1__a" in TOOL_REGISTRY
+    assert store.get_plugin("p1")["enabled"] == 1
+
+
+def test_enable_missing_raises(manager):
+    with pytest.raises(PluginError):
+        manager.enable("ghost")
