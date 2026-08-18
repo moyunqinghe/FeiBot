@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from mcp_discovery import CONFIG_INVALID, TOOL_ERROR, McpDiscoveryError
+from mcp_discovery import CONFIG_INVALID, TOOL_ERROR, McpDiscoveryError, call_tool
 from mcp_discovery.client import _content_text, _coerce_config, _extract_tool_result
+
+_STDIO_MOCK = Path(__file__).resolve().parent / "stdio_mock_server.py"
 
 
 def test_extract_text_content():
@@ -62,4 +67,23 @@ def test_coerce_config_rejects_non_mapping():
 def test_coerce_config_rejects_invalid_mapping():
     with pytest.raises(McpDiscoveryError) as ei:
         _coerce_config({"transport": "stdio"})  # 缺 command
+    assert ei.value.code == CONFIG_INVALID
+
+
+def test_call_tool_stdio_echo():
+    config = {"transport": "stdio", "command": sys.executable, "args": [str(_STDIO_MOCK)]}
+    result = call_tool(config, "echo", {"text": "你好"}, timeout_seconds=15)
+    assert result == "echo: 你好"
+
+
+def test_call_tool_stdio_is_error_raises_tool_error():
+    config = {"transport": "stdio", "command": sys.executable, "args": [str(_STDIO_MOCK)]}
+    with pytest.raises(McpDiscoveryError) as ei:
+        call_tool(config, "fail", {}, timeout_seconds=15)
+    assert ei.value.code == TOOL_ERROR
+
+
+def test_call_tool_rejects_invalid_config():
+    with pytest.raises(McpDiscoveryError) as ei:
+        call_tool({"transport": "stdio"}, "echo", {})
     assert ei.value.code == CONFIG_INVALID

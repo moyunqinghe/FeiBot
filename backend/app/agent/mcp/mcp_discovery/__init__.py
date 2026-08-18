@@ -19,6 +19,7 @@ from .client import (
     DiscoveryResult,
     McpDiscoveryError,
     McpServerConfig,
+    call_tool,
     discover,
 )
 
@@ -35,5 +36,6 @@ __all__ = [
     "DiscoveryResult",
     "McpDiscoveryError",
     "McpServerConfig",
+    "call_tool",
     "discover",
 ]

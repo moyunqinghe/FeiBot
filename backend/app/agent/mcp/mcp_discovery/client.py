@@ -172,6 +172,33 @@ def discover(
     )
 
 
+def call_tool(
+    config: McpServerConfig | Mapping[str, Any],
+    tool_name: str,
+    arguments: Mapping[str, Any] | None = None,
+    *,
+    timeout_seconds: float = 30.0,
+    protocol_version: str = PROTOCOL_VERSION,
+    client_info: Mapping[str, Any] | None = None,
+) -> Any:
+    """连接 MCP server,initialize 后调用单个工具,返回归一化结果数据。
+
+    每次调用新开连接(与 discover 一致)。工具 isError 抛 TOOL_ERROR;
+    连接/协议失败抛对应 code 的 McpDiscoveryError。
+    """
+    config = _coerce_config(config)
+    session = _build_session(config, timeout_seconds, protocol_version, client_info)
+    try:
+        with session:
+            session.initialize()
+            raw = session.call_tool(tool_name, dict(arguments or {}))
+    except McpDiscoveryError:
+        raise
+    except Exception as exc:  # 兜底:收敛为单一错误类型
+        raise McpDiscoveryError(f"MCP 工具调用失败：{exc}", code=PROTOCOL_ERROR, cause=exc) from exc
+    return _extract_tool_result(raw)
+
+
 def _build_session(
     config: McpServerConfig,
     timeout_seconds: float,
@@ -220,6 +247,9 @@ class _Session:
         result = self._request("tools/list", {})
         tools = result.get("tools") if isinstance(result, Mapping) else None
         return list(tools) if isinstance(tools, list) else []
+
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        return self._request("tools/call", {"name": name, "arguments": arguments})
 
     def _initialize_params(self) -> dict[str, Any]:
         return {
