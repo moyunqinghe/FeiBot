@@ -40,3 +40,19 @@ def test_set_plugin_enabled():
     assert store.set_plugin_enabled("p1", 0) is True
     assert store.get_plugin("p1")["enabled"] == 0
     assert store.set_plugin_enabled("nope", 1) is False
+
+
+def test_upsert_preserves_added_and_bumps_updated(monkeypatch):
+    clock = [1000.0]
+
+    def fake_time():
+        clock[0] += 1.0
+        return clock[0]
+
+    monkeypatch.setattr(store.time, "time", fake_time)
+    store.upsert_plugin("p1", "{}", 1)
+    first = store.get_plugin("p1")
+    store.upsert_plugin("p1", "{}", 1)
+    second = store.get_plugin("p1")
+    assert second["added_at"] == first["added_at"]
+    assert second["updated_at"] > first["updated_at"]

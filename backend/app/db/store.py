@@ -1,4 +1,4 @@
-"""sqlite 持久化:kv 表(渠道 token/游标)+ sessions 表(会话)。
+"""sqlite 持久化:kv / sessions / model_configs / messages / mcp_plugins。
 
 只用标准库 sqlite3;每次调用新开连接,简单且对当前单线程轮询足够。
 """
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS mcp_plugins (
     name        TEXT PRIMARY KEY,
     config_json TEXT NOT NULL,
-    enabled     INTEGER NOT NULL DEFAULT 1,
+    enabled     INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
     added_at    REAL NOT NULL,
     updated_at  REAL NOT NULL
 );
