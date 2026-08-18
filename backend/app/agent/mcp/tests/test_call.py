@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from mcp_discovery import TOOL_ERROR, McpDiscoveryError
-from mcp_discovery.client import _content_text, _extract_tool_result
+from mcp_discovery import CONFIG_INVALID, TOOL_ERROR, McpDiscoveryError
+from mcp_discovery.client import _content_text, _coerce_config, _extract_tool_result
 
 
 def test_extract_text_content():
@@ -44,3 +44,22 @@ def test_extract_is_error_raises_tool_error():
 def test_content_text_ignores_non_text_and_handles_none():
     assert _content_text([{"type": "image"}, {"type": "text", "text": "x"}]) == "x"
     assert _content_text(None) == ""
+
+
+def test_coerce_config_accepts_mapping_and_model():
+    from mcp_discovery import McpServerConfig
+    cfg = _coerce_config({"transport": "http", "url": "http://x"})
+    assert cfg.url == "http://x"
+    assert _coerce_config(cfg) is cfg
+
+
+def test_coerce_config_rejects_non_mapping():
+    with pytest.raises(McpDiscoveryError) as ei:
+        _coerce_config("not a mapping")
+    assert ei.value.code == CONFIG_INVALID
+
+
+def test_coerce_config_rejects_invalid_mapping():
+    with pytest.raises(McpDiscoveryError) as ei:
+        _coerce_config({"transport": "stdio"})  # 缺 command
+    assert ei.value.code == CONFIG_INVALID

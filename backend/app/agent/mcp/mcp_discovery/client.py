@@ -120,6 +120,21 @@ class DiscoveryResult:
 # --------------------------------------------------------------------------- #
 
 
+def _coerce_config(config: McpServerConfig | Mapping[str, Any]) -> McpServerConfig:
+    """把配置收敛为 McpServerConfig;非法配置抛 McpDiscoveryError(CONFIG_INVALID)。"""
+    if isinstance(config, McpServerConfig):
+        return config
+    if not isinstance(config, Mapping):
+        raise McpDiscoveryError(
+            f"MCP server 配置必须是 mapping 或 McpServerConfig,实际是 {type(config).__name__}。",
+            code=CONFIG_INVALID,
+        )
+    try:
+        return McpServerConfig.model_validate(dict(config))
+    except ValidationError as exc:
+        raise McpDiscoveryError(f"MCP server 配置无效：{exc}", code=CONFIG_INVALID, cause=exc) from exc
+
+
 def discover(
     config: McpServerConfig | Mapping[str, Any],
     *,
@@ -133,16 +148,7 @@ def discover(
     存的一行配置),后者会先经过 Pydantic 校验。所有可预期失败统一抛
     `McpDiscoveryError`。
     """
-    if not isinstance(config, McpServerConfig):
-        if not isinstance(config, Mapping):
-            raise McpDiscoveryError(
-                f"MCP server 配置必须是 mapping 或 McpServerConfig,实际是 {type(config).__name__}。",
-                code=CONFIG_INVALID,
-            )
-        try:
-            config = McpServerConfig.model_validate(dict(config))
-        except ValidationError as exc:
-            raise McpDiscoveryError(f"MCP server 配置无效：{exc}", code=CONFIG_INVALID, cause=exc) from exc
+    config = _coerce_config(config)
 
     session = _build_session(config, timeout_seconds, protocol_version, client_info)
     try:
