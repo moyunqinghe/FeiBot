@@ -1,0 +1,98 @@
+"""MCP 插件生命周期管理:把一个 MCP server 当作一个插件装入/卸下 agent。
+
+装 = discover() 取清单 → 加前缀注册进 TOOL_REGISTRY → 落库;
+卸 = 按归属把工具移出注册表 → 删库。归属映射在本模块维护,卸载不依赖
+server 在线。第一步 handler 为占位(远程执行 tools/call 是第二步)。
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+
+from mcp_discovery import McpDiscoveryError, McpServerConfig, discover
+
+from app.agent.tools.registry import ToolSpec, register_tool, unregister_tool
+from app.db import store
+
+logger = logging.getLogger(__name__)
+
+_SEPARATOR = "__"
+_PLUGIN_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+class PluginError(Exception):
+    """插件管理层错误(非法名、插件不存在等)。"""
+
+
+class McpPluginManager:
+    def __init__(self) -> None:
+        self._provenance: dict[str, set[str]] = {}  # 插件名 -> 已注册工具 key
+        self._status: dict[str, str] = {}           # 插件名 -> 最近加载状态
+
+    # ---- 内部 ----
+    @staticmethod
+    def _validate_name(name: str) -> None:
+        if not name or not _PLUGIN_NAME_RE.match(name):
+            raise PluginError(f"非法插件名:{name!r}(仅允许字母/数字/下划线/连字符)")
+        if _SEPARATOR in name:
+            raise PluginError(f"插件名不能包含 {_SEPARATOR!r}:{name!r}")
+
+    @staticmethod
+    def _normalize_config(config) -> dict:
+        if isinstance(config, McpServerConfig):
+            cfg = config.model_dump()
+        else:
+            cfg = dict(config)
+        # 先把 type 别名为 transport,再走 McpServerConfig 做值归一化
+        # (如 streamable_http -> http)。
+        if "type" in cfg and "transport" not in cfg:
+            cfg["transport"] = cfg.pop("type")
+        normalized = McpServerConfig(**cfg).model_dump(exclude_none=True)
+        return normalized
+
+    @staticmethod
+    def _placeholder_handler(plugin: str, tool: str):
+        def handler(**args) -> str:
+            return f"工具 {plugin}{_SEPARATOR}{tool} 来自 MCP 插件 {plugin},远程执行尚未接入。"
+        return handler
+
+    def _register_tools(self, name: str, tools) -> set[str]:
+        keys: set[str] = set()
+        for t in tools:
+            key = f"{name}{_SEPARATOR}{t.name}"
+            params = {
+                pname: str(pdef.get("description") or pdef.get("type") or "")
+                for pname, pdef in (t.input_schema.get("properties") or {}).items()
+                if isinstance(pdef, dict)
+            }
+            register_tool(ToolSpec(
+                name=key,
+                description=t.description or f"MCP 工具 {t.name}",
+                parameters=params,
+                handler=self._placeholder_handler(name, t.name),
+            ))
+            keys.add(key)
+        return keys
+
+    def _remove_tools(self, name: str) -> int:
+        removed = 0
+        for key in list(self._provenance.get(name, ())):
+            if unregister_tool(key):
+                removed += 1
+        self._provenance.pop(name, None)
+        return removed
+
+    # ---- 公共 API ----
+    def install(self, name: str, config) -> int:
+        """发现并装入插件;同名幂等重装。返回注册的工具数。"""
+        self._validate_name(name)
+        cfg = self._normalize_config(config)
+        result = discover(cfg)  # 失败抛 McpDiscoveryError,不注册不落库
+        self._remove_tools(name)
+        keys = self._register_tools(name, result.tools)
+        self._provenance[name] = keys
+        self._status[name] = f"ok, {len(keys)} tools"
+        store.upsert_plugin(name, json.dumps(cfg, ensure_ascii=False), 1)
+        return len(keys)
