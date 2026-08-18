@@ -2,7 +2,7 @@
 
 装 = discover() 取清单 → 加前缀注册进 TOOL_REGISTRY → 落库;
 卸 = 按归属把工具移出注册表 → 删库。归属映射在本模块维护,卸载不依赖
-server 在线。第一步 handler 为占位(远程执行 tools/call 是第二步)。
+server 在线。handler 通过基座 call_tool 发起真实远程调用。
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 import logging
 import re
 
-from mcp_discovery import McpDiscoveryError, McpServerConfig, discover
+from mcp_discovery import McpDiscoveryError, McpServerConfig, call_tool, discover
 
 from app.agent.tools.registry import ToolSpec, register_tool, unregister_tool
 from app.db import store
@@ -20,10 +20,21 @@ logger = logging.getLogger(__name__)
 
 _SEPARATOR = "__"
 _PLUGIN_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+MCP_CALL_TIMEOUT_SECONDS = 30.0
 
 
 class PluginError(Exception):
     """插件管理层错误(非法名、插件不存在等)。"""
+
+
+def _stringify(value) -> str:
+    """把 call_tool 返回的数据值转成回填给模型的字符串。"""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class McpPluginManager:
@@ -53,12 +64,13 @@ class McpPluginManager:
         return normalized
 
     @staticmethod
-    def _placeholder_handler(plugin: str, tool: str):
+    def _make_handler(config: dict, tool_name: str):
         def handler(**args) -> str:
-            return f"工具 {plugin}{_SEPARATOR}{tool} 来自 MCP 插件 {plugin},远程执行尚未接入。"
+            result = call_tool(config, tool_name, args, timeout_seconds=MCP_CALL_TIMEOUT_SECONDS)
+            return _stringify(result)
         return handler
 
-    def _register_tools(self, name: str, tools) -> set[str]:
+    def _register_tools(self, name: str, tools, config: dict) -> set[str]:
         keys: set[str] = set()
         for t in tools:
             key = f"{name}{_SEPARATOR}{t.name}"
@@ -71,7 +83,7 @@ class McpPluginManager:
                 name=key,
                 description=t.description or f"MCP 工具 {t.name}",
                 parameters=params,
-                handler=self._placeholder_handler(name, t.name),
+                handler=self._make_handler(config, t.name),
             ))
             keys.add(key)
         return keys
@@ -91,7 +103,7 @@ class McpPluginManager:
         cfg = self._normalize_config(config)
         result = discover(cfg)  # 失败抛 McpDiscoveryError,不注册不落库
         self._remove_tools(name)
-        keys = self._register_tools(name, result.tools)
+        keys = self._register_tools(name, result.tools, cfg)
         self._provenance[name] = keys
         self._status[name] = f"ok, {len(keys)} tools"
         store.upsert_plugin(name, json.dumps(cfg, ensure_ascii=False), 1)
@@ -119,12 +131,14 @@ class McpPluginManager:
         if row is None:
             raise PluginError(f"插件不存在:{name}")
         try:
-            result = discover(json.loads(row["config_json"]))
+            # 库里存的是 install 时归一化后的配置,load 出来即可直接给 call_tool 用
+            cfg = json.loads(row["config_json"])
+            result = discover(cfg)
         except Exception as exc:  # noqa: BLE001 — 记录失败状态再抛给调用方
             self._status[name] = f"enable failed: {exc}"
             raise
         self._remove_tools(name)
-        keys = self._register_tools(name, result.tools)
+        keys = self._register_tools(name, result.tools, cfg)
         self._provenance[name] = keys
         store.set_plugin_enabled(name, 1)
         self._status[name] = f"ok, {len(keys)} tools"
@@ -137,9 +151,10 @@ class McpPluginManager:
             raise PluginError(f"插件不存在:{name}")
         if not row["enabled"]:
             raise PluginError(f"插件 {name} 已停用,请先 enable 再 reload")
-        result = discover(json.loads(row["config_json"]))
+        cfg = json.loads(row["config_json"])
+        result = discover(cfg)
         self._remove_tools(name)
-        keys = self._register_tools(name, result.tools)
+        keys = self._register_tools(name, result.tools, cfg)
         self._provenance[name] = keys
         store.upsert_plugin(name, row["config_json"], row["enabled"])
         self._status[name] = f"ok, {len(keys)} tools"
@@ -165,9 +180,10 @@ class McpPluginManager:
                 continue
             name = row["name"]
             try:
-                result = discover(json.loads(row["config_json"]))
+                cfg = json.loads(row["config_json"])
+                result = discover(cfg)
                 self._remove_tools(name)
-                keys = self._register_tools(name, result.tools)
+                keys = self._register_tools(name, result.tools, cfg)
                 self._provenance[name] = keys
                 self._status[name] = f"ok, {len(keys)} tools"
             except Exception as exc:  # noqa: BLE001 — 单个插件失败不影响整体

@@ -56,6 +56,22 @@ def handle_jsonrpc(request: dict[str, Any]) -> dict[str, Any] | None:
         )
     if method == "tools/list":
         return _result(request_id, {"tools": TOOLS})
+    if method == "tools/call":
+        params = request.get("params") or {}
+        name = str(params.get("name") or "")
+        args = params.get("arguments") or {}
+        if name == "echo":
+            text = str(args.get("text") or "")
+            return _result(
+                request_id,
+                {"content": [{"type": "text", "text": f"echo: {text}"}], "isError": False},
+            )
+        if name == "fail":
+            return _result(
+                request_id,
+                {"content": [{"type": "text", "text": "boom: tool failed"}], "isError": True},
+            )
+        return _error(request_id, -32601, f"Unknown tool: {name}")
     return _error(request_id, -32601, f"Unsupported method: {method}")
 
 

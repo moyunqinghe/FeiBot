@@ -35,6 +35,7 @@ LAUNCH_FAILED = "LAUNCH_FAILED"        # stdio 子进程启动失败
 CONNECT_FAILED = "CONNECT_FAILED"      # 连接中断/进程提前退出/HTTP 状态码异常
 TIMEOUT = "TIMEOUT"                    # 读/写/等待超时
 PROTOCOL_ERROR = "PROTOCOL_ERROR"      # JSON-RPC 错误、响应体不合法等协议问题
+TOOL_ERROR = "TOOL_ERROR"              # 工具自身返回 isError(协议本身正常)
 
 
 class McpDiscoveryError(Exception):
@@ -119,6 +120,21 @@ class DiscoveryResult:
 # --------------------------------------------------------------------------- #
 
 
+def _coerce_config(config: McpServerConfig | Mapping[str, Any]) -> McpServerConfig:
+    """把配置收敛为 McpServerConfig;非法配置抛 McpDiscoveryError(CONFIG_INVALID)。"""
+    if isinstance(config, McpServerConfig):
+        return config
+    if not isinstance(config, Mapping):
+        raise McpDiscoveryError(
+            f"MCP server 配置必须是 mapping 或 McpServerConfig,实际是 {type(config).__name__}。",
+            code=CONFIG_INVALID,
+        )
+    try:
+        return McpServerConfig.model_validate(dict(config))
+    except ValidationError as exc:
+        raise McpDiscoveryError(f"MCP server 配置无效：{exc}", code=CONFIG_INVALID, cause=exc) from exc
+
+
 def discover(
     config: McpServerConfig | Mapping[str, Any],
     *,
@@ -132,16 +148,7 @@ def discover(
     存的一行配置),后者会先经过 Pydantic 校验。所有可预期失败统一抛
     `McpDiscoveryError`。
     """
-    if not isinstance(config, McpServerConfig):
-        if not isinstance(config, Mapping):
-            raise McpDiscoveryError(
-                f"MCP server 配置必须是 mapping 或 McpServerConfig,实际是 {type(config).__name__}。",
-                code=CONFIG_INVALID,
-            )
-        try:
-            config = McpServerConfig.model_validate(dict(config))
-        except ValidationError as exc:
-            raise McpDiscoveryError(f"MCP server 配置无效：{exc}", code=CONFIG_INVALID, cause=exc) from exc
+    config = _coerce_config(config)
 
     session = _build_session(config, timeout_seconds, protocol_version, client_info)
     try:
@@ -163,6 +170,33 @@ def discover(
         capabilities=dict(capabilities) if isinstance(capabilities, Mapping) else {},
         server_info=dict(server_info) if isinstance(server_info, Mapping) else {},
     )
+
+
+def call_tool(
+    config: McpServerConfig | Mapping[str, Any],
+    tool_name: str,
+    arguments: Mapping[str, Any] | None = None,
+    *,
+    timeout_seconds: float = 30.0,
+    protocol_version: str = PROTOCOL_VERSION,
+    client_info: Mapping[str, Any] | None = None,
+) -> Any:
+    """连接 MCP server,initialize 后调用单个工具,返回归一化结果数据。
+
+    每次调用新开连接(与 discover 一致)。工具 isError 抛 TOOL_ERROR;
+    连接/协议失败抛对应 code 的 McpDiscoveryError。
+    """
+    config = _coerce_config(config)
+    session = _build_session(config, timeout_seconds, protocol_version, client_info)
+    try:
+        with session:
+            session.initialize()
+            raw = session.call_tool(tool_name, dict(arguments or {}))
+    except McpDiscoveryError:
+        raise
+    except Exception as exc:  # 兜底:收敛为单一错误类型
+        raise McpDiscoveryError(f"MCP 工具调用失败：{exc}", code=PROTOCOL_ERROR, cause=exc) from exc
+    return _extract_tool_result(raw)
 
 
 def _build_session(
@@ -213,6 +247,9 @@ class _Session:
         result = self._request("tools/list", {})
         tools = result.get("tools") if isinstance(result, Mapping) else None
         return list(tools) if isinstance(tools, list) else []
+
+    def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        return self._request("tools/call", {"name": name, "arguments": arguments})
 
     def _initialize_params(self) -> dict[str, Any]:
         return {
@@ -888,6 +925,34 @@ def _raise_json_rpc_error(payload: Mapping[str, Any]) -> None:
 
 def _stderr_text(collector: _StderrCollector | None) -> str:
     return collector.text() if collector is not None else ""
+
+
+def _content_text(content: Any) -> str:
+    """从 tools/call 的 content 列表里抽取 type==text 的文本,换行拼接。"""
+    if not isinstance(content, list):
+        return ""
+    parts = [
+        str(item.get("text") or "")
+        for item in content
+        if isinstance(item, Mapping) and item.get("type") == "text"
+    ]
+    return "\n".join(part for part in parts if part)
+
+
+def _extract_tool_result(raw: Any) -> Any:
+    """归一化 tools/call 的 result:isError 抛 TOOL_ERROR;优先 structuredContent,否则取文本。"""
+    if not isinstance(raw, Mapping):
+        return raw
+    if raw.get("isError"):
+        message = _content_text(raw.get("content")) or "MCP 工具返回 isError=true"
+        raise McpDiscoveryError(message, code=TOOL_ERROR)
+    structured = raw.get("structuredContent")
+    if structured is not None:
+        return structured
+    text = _content_text(raw.get("content"))
+    if text:
+        return text
+    return dict(raw)
 
 
 def _normalize_tool_definition(item: Mapping[str, Any]) -> DiscoveredTool:

@@ -14,10 +14,12 @@ from .client import (
     PROTOCOL_ERROR,
     PROTOCOL_VERSION,
     TIMEOUT,
+    TOOL_ERROR,
     DiscoveredTool,
     DiscoveryResult,
     McpDiscoveryError,
     McpServerConfig,
+    call_tool,
     discover,
 )
 
@@ -29,9 +31,11 @@ __all__ = [
     "PROTOCOL_ERROR",
     "PROTOCOL_VERSION",
     "TIMEOUT",
+    "TOOL_ERROR",
     "DiscoveredTool",
     "DiscoveryResult",
     "McpDiscoveryError",
     "McpServerConfig",
+    "call_tool",
     "discover",
 ]

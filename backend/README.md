@@ -44,8 +44,9 @@ agent 可以在对话里调用工具拿实时信息、执行操作。采用提�
 
 MCP server 以插件形式接入(`agent/tools/mcp_plugins.py`):`discover()` 取回的工具
 清单加 `{插件名}__` 前缀注册进同一注册表,与内置工具统一被 engine 注入与调用;
-配置持久化在 sqlite `mcp_plugins` 表,启动自动重载启用的插件。第一步为"定义的装/卸",
-远程执行(`tools/call`)为下一步。
+配置持久化在 sqlite `mcp_plugins` 表,启动自动重载启用的插件。handler 通过基座
+`call_tool` 发起真实远程调用(每次新开连接),工具报错时以「工具执行失败:…」
+回填给模型。
 
 ```python
 from app.agent.tools.mcp_plugins import plugin_manager

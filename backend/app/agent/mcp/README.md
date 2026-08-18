@@ -111,6 +111,7 @@ discover(
 | `CONNECT_FAILED` | HTTP/SSE 连接失败、HTTP 状态码异常、stdio 进程提前退出 |
 | `TIMEOUT` | 读/写/等待响应超时 |
 | `PROTOCOL_ERROR` | JSON-RPC error、响应体不合法、SSE 未返回 endpoint 等 |
+| `TOOL_ERROR` | 工具自身返回 isError(协议正常,server 已正确响应) |
 
 ## 本包的边界:使用方需要自己决定的事
 
@@ -121,9 +122,8 @@ discover(
    `discover()` 同时接受 `McpServerConfig` 与普通 mapping,怎么存怎么取都行。
 2. **何时发现、结果怎么缓存** — 定时同步、按需探测、TTL,都是宿主的编排。
    tools/list 分页(cursor)目前未实现——绝大多数 server 一页返回全部。
-3. **tools/call** — 本包只做发现。会话结构(`_Session` 的
-   initialize/request/notify)已经为扩展 tools/call、resources/read 留好位置,
-   但那是下一个模块的事。
+3. **tools/call** — `call_tool()` 提供单次工具调用(见下方 API 摘要);
+   批量编排、重试与结果聚合由宿主决定。
 4. **重试策略与可观测性** — `code` 标好了错误分类
    (TIMEOUT/CONNECT_FAILED 通常值得重试),重试与打点由宿主决定。
 5. **工具汇入 agent 注册表** — 把 `DiscoveredTool` 翻译成宿主工具系统的
@@ -131,8 +131,8 @@ discover(
 
 ### 本包有意不包含的东西
 
-- MCP-UI Apps 扩展(`io.modelcontextprotocol/ui`)、`tools/call`、
-  `resources/read`、内置演示工具——只做发现;会话结构留有扩展位。
+- MCP-UI Apps 扩展(`io.modelcontextprotocol/ui`)、
+  `resources/read`、内置演示工具——只做发现与单次调用;会话结构留有扩展位。
 - 子进程管理不引入 Job Object 之类的重型机制,内置 `_ProcessGuard`
   (terminate→kill→wait)足够。
 - 不做自由 dict 猜测式配置——配置是类型化的 `McpServerConfig`
@@ -147,6 +147,9 @@ discover(
 
 - `discover(config, *, timeout_seconds=10.0, protocol_version=PROTOCOL_VERSION,
   client_info=None)` — 唯一入口,返回 `DiscoveryResult`。
+- `call_tool(config, tool_name, arguments=None, *, timeout_seconds=30.0, ...)` —
+  连接 MCP server、initialize 后调用单个工具并返回归一化结果数据(每次新开连接);
+  工具 isError 抛 `TOOL_ERROR`。
 - `McpServerConfig` — Pydantic 配置(frozen):`transport` / `command` / `args` /
   `env` / `cwd` / `url` / `headers`。
 - `DiscoveredTool` — frozen dataclass:`name` / `title` / `description` /
@@ -154,5 +157,5 @@ discover(
 - `DiscoveryResult` — frozen dataclass:`tools` / `protocol_version` /
   `capabilities` / `server_info`。
 - `McpDiscoveryError` — 单一异常:`.code`(上方常量)/ `.cause`。
-- 常量:`PROTOCOL_VERSION`、`CLIENT_INFO`、五个错误码
-  (`CONFIG_INVALID` / `LAUNCH_FAILED` / `CONNECT_FAILED` / `TIMEOUT` / `PROTOCOL_ERROR`)。
+- 常量:`PROTOCOL_VERSION`、`CLIENT_INFO`、六个错误码
+  (`CONFIG_INVALID` / `LAUNCH_FAILED` / `CONNECT_FAILED` / `TIMEOUT` / `PROTOCOL_ERROR` / `TOOL_ERROR`)。
