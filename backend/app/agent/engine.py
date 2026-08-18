@@ -141,7 +141,7 @@ def _handle_model(query: str) -> str:
 MCP_HELP = (
     "用法:\n"
     "/mcp 或 /mcp list - 列出已装插件\n"
-    "/mcp add <名称> <url> - 装入插件\n"
+    "/mcp add <名称> <url> - 装入插件(仅支持 url/streamable_http 类)\n"
     "/mcp remove <名称> - 卸下插件\n"
     "/mcp enable <名称> 或 /mcp disable <名称> - 启用/停用插件"
 )
@@ -182,7 +182,7 @@ def _mcp_add(arg: str) -> str:
     name, _, url = arg.partition(" ")
     name, url = name.strip(), url.strip()
     if not name or not url:
-        return "用法:/mcp add <名称> <url>"
+        return "用法:/mcp add <名称> <url>(仅支持 url 类插件)"
     try:
         n = plugin_manager.install(name, {"type": "streamable_http", "url": url})
     except (McpDiscoveryError, PluginError) as exc:
@@ -205,7 +205,9 @@ def _mcp_enable(arg: str) -> str:
         return "用法:/mcp enable <名称>"
     try:
         n = plugin_manager.enable(name)
-    except (McpDiscoveryError, PluginError) as exc:
+    except PluginError:
+        return f"没有名为「{name}」的插件,/mcp 查看已装插件。"
+    except McpDiscoveryError as exc:
         return f"启用失败:{exc}"
     return f"已启用插件 {name}({n} 个工具)。"
 

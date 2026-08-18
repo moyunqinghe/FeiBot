@@ -188,3 +188,20 @@ def test_mcp_remove_missing(monkeypatch) -> None:
 def test_mcp_unknown_subcommand_shows_usage(monkeypatch) -> None:
     monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
     assert "用法" in engine.handle_message("conv-1", "/mcp wat")
+
+
+def test_mcp_enable_missing(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+
+    def boom(name):
+        from app.agent.tools.mcp_plugins import PluginError
+        raise PluginError(f"插件不存在:{name}")
+
+    monkeypatch.setattr(engine.plugin_manager, "enable", boom)
+    assert "没有名为" in engine.handle_message("conv-1", "/mcp enable ghost")
+
+
+def test_mcp_disable_missing(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    monkeypatch.setattr(engine.plugin_manager, "disable", lambda name: False)
+    assert "没有名为" in engine.handle_message("conv-1", "/mcp disable ghost")

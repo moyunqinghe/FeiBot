@@ -12,7 +12,7 @@ COMMAND_PREFIX = "/"
 
 @dataclass
 class ChannelCommand:
-    kind: str  # help/ping/model/memory/forget
+    kind: str  # help/ping/model/memory/forget/mcp
     query: str = ""  # 指令后的剩余文本(可为空)
 
 
