@@ -205,3 +205,8 @@ def test_mcp_disable_missing(monkeypatch) -> None:
     monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
     monkeypatch.setattr(engine.plugin_manager, "disable", lambda name: False)
     assert "没有名为" in engine.handle_message("conv-1", "/mcp disable ghost")
+
+
+def test_mcp_add_bad_url_scheme(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    assert "http:// 或 https://" in engine.handle_message("conv-1", "/mcp add foo not-a-url")

@@ -168,7 +168,10 @@ def _handle_mcp(conv_key: str, query: str) -> str:
 
 
 def _mcp_list() -> str:
-    rows = plugin_manager.list()
+    try:
+        rows = plugin_manager.list()
+    except Exception as exc:  # noqa: BLE001 — 与其他子命令一致,不让异常漏到渠道
+        return f"查看插件失败:{exc}"
     if not rows:
         return f"还没有装入 MCP 插件。\n{MCP_HELP}"
     lines = ["已装 MCP 插件(* 为启用):"]
@@ -182,7 +185,9 @@ def _mcp_add(arg: str) -> str:
     name, _, url = arg.partition(" ")
     name, url = name.strip(), url.strip()
     if not name or not url:
-        return "用法:/mcp add <名称> <url>(仅支持 url 类插件)"
+        return "用法:/mcp add <名称> <url>(仅支持 url/streamable_http 类)"
+    if not url.startswith(("http://", "https://")):
+        return "url 需以 http:// 或 https:// 开头。"
     try:
         n = plugin_manager.install(name, {"type": "streamable_http", "url": url})
     except (McpDiscoveryError, PluginError) as exc:
