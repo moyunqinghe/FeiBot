@@ -131,6 +131,7 @@ class McpPluginManager:
         if row is None:
             raise PluginError(f"插件不存在:{name}")
         try:
+            # 库里存的是 install 时归一化后的配置,load 出来即可直接给 call_tool 用
             cfg = json.loads(row["config_json"])
             result = discover(cfg)
         except Exception as exc:  # noqa: BLE001 — 记录失败状态再抛给调用方

@@ -1,4 +1,4 @@
-"""call_tool 的结果归一化与配置收敛测试(真实 stdio 调用在后续任务补)。"""
+"""call_tool 的结果归一化、配置收敛与真实 stdio 调用测试。"""
 
 from __future__ import annotations
 
