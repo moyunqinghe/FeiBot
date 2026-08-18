@@ -106,3 +106,23 @@ def test_unregister_tool_removes_and_reports():
 
 def test_unregister_missing_tool_returns_false():
     assert unregister_tool("never_registered") is False
+
+
+def test_uninstall_removes_tools_and_record(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a", "b"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    assert manager.uninstall("p1") is True
+    assert "p1__a" not in TOOL_REGISTRY and "p1__b" not in TOOL_REGISTRY
+    assert store.get_plugin("p1") is None
+
+
+def test_uninstall_missing_returns_false(manager):
+    assert manager.uninstall("ghost") is False
+
+
+def test_install_idempotent_reinstall(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    assert list(TOOL_REGISTRY) == ["p1__a"]
+    assert len(store.list_plugins()) == 1

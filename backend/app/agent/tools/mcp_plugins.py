@@ -96,3 +96,10 @@ class McpPluginManager:
         self._status[name] = f"ok, {len(keys)} tools"
         store.upsert_plugin(name, json.dumps(cfg, ensure_ascii=False), 1)
         return len(keys)
+
+    def uninstall(self, name: str) -> bool:
+        """卸下插件:移出其工具并删除库记录。不联网;不存在返回 False。"""
+        existed_db = store.delete_plugin(name)
+        removed = self._remove_tools(name)
+        self._status.pop(name, None)
+        return existed_db or removed > 0
