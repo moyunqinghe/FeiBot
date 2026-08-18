@@ -20,3 +20,18 @@ CHANNEL_SECRET = os.environ.get("FEIBOT_CHANNEL_SECRET", "feibot-dev-secret")
 
 # 微信 ilink 默认接入地址(扫码确认后服务端可能下发区域化 baseurl)
 WECHAT_BASE_URL = "https://ilinkai.weixin.qq.com"
+
+# 工具白名单:只有这些会话 conv key 能触发工具(逗号分隔),空串 = 全员禁用。
+# 任何能给 bot 发消息的人都进得了对话,工具(尤其 shell)必须只对主人开放。
+TOOL_ADMIN_CONV_KEYS = frozenset(
+    k.strip()
+    for k in os.environ.get(
+        "FEIBOT_TOOL_ADMINS", "o9cq806k_eukyFS6hHA5FzseIugA@im.wechat"
+    ).split(",")
+    if k.strip()
+)
+
+
+def is_tool_admin(conv_key: str) -> bool:
+    """该会话是否在工具白名单里。"""
+    return conv_key in TOOL_ADMIN_CONV_KEYS
