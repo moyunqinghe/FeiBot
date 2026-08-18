@@ -228,16 +228,16 @@ _STDIO_MOCK = (
 )
 
 
-def test_integration_stdio_install_list_uninstall(manager):
+def test_integration_stdio_install_call_uninstall(manager):
     config = {"transport": "stdio", "command": sys.executable, "args": [str(_STDIO_MOCK)]}
     count = manager.install("mocksrv", config)
     assert count == 3
     assert set(TOOL_REGISTRY) == {
         "mocksrv__echo", "mocksrv__sum", "mocksrv__product_lookup",
     }
-    # 占位 handler 可调用且不炸
-    out = TOOL_REGISTRY["mocksrv__echo"].handler()
-    assert "远程执行尚未接入" in out
+    # 真实远程调用 echo
+    out = TOOL_REGISTRY["mocksrv__echo"].handler(text="hi")
+    assert out == "echo: hi"
 
     assert manager.uninstall("mocksrv") is True
     assert TOOL_REGISTRY == {}
@@ -268,3 +268,38 @@ def test_enable_discover_failure_records_status(manager, monkeypatch):
     assert "enable failed" in status["p1"]
     assert store.get_plugin("p1")["enabled"] == 0
     assert TOOL_REGISTRY == {}
+
+
+def test_stringify_str_passthrough_and_dict():
+    from app.agent.tools.mcp_plugins import _stringify
+    assert _stringify("hello") == "hello"
+    assert json.loads(_stringify({"a": 1})) == {"a": 1}
+
+
+def test_install_handler_calls_call_tool_with_config(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["alpha"]))
+    captured = {}
+
+    def fake_call(config, tool_name, arguments=None, **kw):
+        captured.update({"config": config, "tool": tool_name, "args": arguments})
+        return {"ok": True, "echo": arguments}
+
+    monkeypatch.setattr(mcp_plugins, "call_tool", fake_call)
+    manager.install("p1", {"transport": "http", "url": "http://x/mcp"})
+    out = TOOL_REGISTRY["p1__alpha"].handler(a="1")
+    assert captured["tool"] == "alpha"
+    assert captured["args"] == {"a": "1"}
+    assert captured["config"]["url"] == "http://x/mcp"
+    assert json.loads(out) == {"ok": True, "echo": {"a": "1"}}
+
+
+def test_handler_raises_on_call_error(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["alpha"]))
+
+    def boom(config, tool_name, arguments=None, **kw):
+        raise McpDiscoveryError("工具报错", code="TOOL_ERROR")
+
+    monkeypatch.setattr(mcp_plugins, "call_tool", boom)
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    with pytest.raises(McpDiscoveryError):
+        TOOL_REGISTRY["p1__alpha"].handler()
