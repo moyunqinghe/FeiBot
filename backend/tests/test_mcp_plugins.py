@@ -242,3 +242,29 @@ def test_integration_stdio_install_list_uninstall(manager):
     assert manager.uninstall("mocksrv") is True
     assert TOOL_REGISTRY == {}
     assert store.get_plugin("mocksrv") is None
+
+
+def test_reload_disabled_plugin_raises(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    manager.disable("p1")
+    with pytest.raises(PluginError):
+        manager.reload("p1")
+    assert TOOL_REGISTRY == {}
+
+
+def test_enable_discover_failure_records_status(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    manager.disable("p1")
+
+    def boom(cfg, **kw):
+        raise McpDiscoveryError("连不上", code="CONNECT_FAILED")
+
+    monkeypatch.setattr(mcp_plugins, "discover", boom)
+    with pytest.raises(McpDiscoveryError):
+        manager.enable("p1")
+    status = {row["name"]: row["status"] for row in manager.list()}
+    assert "enable failed" in status["p1"]
+    assert store.get_plugin("p1")["enabled"] == 0
+    assert TOOL_REGISTRY == {}

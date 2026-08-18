@@ -118,7 +118,11 @@ class McpPluginManager:
         row = store.get_plugin(name)
         if row is None:
             raise PluginError(f"插件不存在:{name}")
-        result = discover(json.loads(row["config_json"]))
+        try:
+            result = discover(json.loads(row["config_json"]))
+        except Exception as exc:  # noqa: BLE001 — 记录失败状态再抛给调用方
+            self._status[name] = f"enable failed: {exc}"
+            raise
         self._remove_tools(name)
         keys = self._register_tools(name, result.tools)
         self._provenance[name] = keys
@@ -127,10 +131,12 @@ class McpPluginManager:
         return len(keys)
 
     def reload(self, name: str) -> int:
-        """重新 discover 并 diff 更新已注册工具。不存在抛 PluginError。"""
+        """重新 discover 并 diff 更新已注册工具。不存在或已停用抛 PluginError。"""
         row = store.get_plugin(name)
         if row is None:
             raise PluginError(f"插件不存在:{name}")
+        if not row["enabled"]:
+            raise PluginError(f"插件 {name} 已停用,请先 enable 再 reload")
         result = discover(json.loads(row["config_json"]))
         self._remove_tools(name)
         keys = self._register_tools(name, result.tools)
@@ -175,7 +181,7 @@ class McpPluginManager:
         for name, cfg in servers.items():
             try:
                 results[name] = self.install(name, cfg)
-            except (PluginError, McpDiscoveryError) as exc:
+            except Exception as exc:  # noqa: BLE001
                 results[name] = f"failed: {exc}"
         return results
 
