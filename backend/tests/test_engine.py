@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from llm_protocols import ProtocolCallError
 from llm_protocols.client import LLMClient as ProtocolLLMClient
+from mcp_discovery import McpDiscoveryError
 
 from app.agent import engine
 from app.agent import profile
@@ -133,3 +134,57 @@ def test_memory_and_forget_commands() -> None:
     assert "已清空关于你的全部记忆与画像" in engine.handle_message("conv-1", "/遗忘")
     assert MemoryStore().load() == []
     assert profile.profile_summary() == {}  # 画像一并清空
+
+
+def test_mcp_denied_for_non_admin(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: False)
+    assert "仅限管理员" in engine.handle_message("conv-1", "/mcp list")
+
+
+def test_mcp_list_empty_for_admin(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    reply = engine.handle_message("conv-1", "/mcp")
+    assert "还没有装入 MCP 插件" in reply
+
+
+def test_mcp_add_and_remove_flow(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    monkeypatch.setattr(engine.plugin_manager, "install", lambda name, cfg: 3)
+    reply = engine.handle_message("conv-1", "/mcp add foo http://x/mcp")
+    assert "已装入插件 foo" in reply and "3 个工具" in reply
+    monkeypatch.setattr(engine.plugin_manager, "uninstall", lambda name: True)
+    assert "已卸下插件 foo" in engine.handle_message("conv-1", "/mcp remove foo")
+
+
+def test_mcp_add_missing_args_shows_usage(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    assert "用法" in engine.handle_message("conv-1", "/mcp add foo")
+
+
+def test_mcp_add_install_failure(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+
+    def boom(name, cfg):
+        raise McpDiscoveryError("连不上", code="CONNECT_FAILED")
+
+    monkeypatch.setattr(engine.plugin_manager, "install", boom)
+    assert "装入失败" in engine.handle_message("conv-1", "/mcp add foo http://x")
+
+
+def test_mcp_enable_and_disable(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    monkeypatch.setattr(engine.plugin_manager, "enable", lambda name: 2)
+    monkeypatch.setattr(engine.plugin_manager, "disable", lambda name: True)
+    assert "已启用插件 foo" in engine.handle_message("conv-1", "/mcp enable foo")
+    assert "已停用插件 foo" in engine.handle_message("conv-1", "/mcp disable foo")
+
+
+def test_mcp_remove_missing(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    monkeypatch.setattr(engine.plugin_manager, "uninstall", lambda name: False)
+    assert "没有名为" in engine.handle_message("conv-1", "/mcp remove ghost")
+
+
+def test_mcp_unknown_subcommand_shows_usage(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    assert "用法" in engine.handle_message("conv-1", "/mcp wat")

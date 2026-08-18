@@ -17,6 +17,7 @@ import logging
 import re
 
 from llm_protocols import LLMError, ProtocolCallError, loads_llm_json
+from mcp_discovery import McpDiscoveryError
 
 from app.agent.context.assemble import assemble_context
 from app.agent.memory.distill import distill_memory
@@ -25,6 +26,7 @@ from app.agent.profile import profile_summary, reset_profile
 from app.agent.session.session import get_or_create
 from app.agent.slash import ChannelCommand, parse_command
 from app.agent.tools import execute_tool_call, parse_tool_call, render_tools_prompt
+from app.agent.tools.mcp_plugins import PluginError, plugin_manager
 from app.agent.tools.registry import TOOL_REGISTRY
 from app.config import is_tool_admin
 from app.db import store
@@ -73,14 +75,20 @@ HELP_TEXT = (
     "/模型 <名称> - 切换当前使用的模型\n"
     "/记忆(/memory) - 查看我记住的关于你的事\n"
     "/遗忘(/forget) - 清空关于你的全部记忆与画像\n"
+    "/mcp(/mcp list) - 列出已装 MCP 插件(仅管理员)\n"
+    "/mcp add <名称> <url> - 装入 MCP 插件\n"
+    "/mcp remove <名称> - 卸下 MCP 插件\n"
+    "/mcp enable|disable <名称> - 启用/停用 MCP 插件\n"
     "其他消息直接发给助理。"
 )
 
 ECHO_HINT = "(未配置模型,使用 echo 桩;用 /模型 指令或 python -m app.llm.manage 配置)"
 
 
-def _handle_command(cmd: ChannelCommand) -> str:
+def _handle_command(conv_key: str, cmd: ChannelCommand) -> str:
     """本地应答 slash 指令。"""
+    if cmd.kind == "mcp":
+        return _handle_mcp(conv_key, cmd.query)
     if cmd.kind == "ping":
         return "pong"
     if cmd.kind == "model":
@@ -130,6 +138,87 @@ def _handle_model(query: str) -> str:
     return f"没有名为「{query}」的模型配置,发送 /模型 查看已有配置。"
 
 
+MCP_HELP = (
+    "用法:\n"
+    "/mcp 或 /mcp list - 列出已装插件\n"
+    "/mcp add <名称> <url> - 装入插件\n"
+    "/mcp remove <名称> - 卸下插件\n"
+    "/mcp enable <名称> 或 /mcp disable <名称> - 启用/停用插件"
+)
+
+
+def _handle_mcp(conv_key: str, query: str) -> str:
+    """/mcp:管理 MCP 插件(仅管理员)。list/add/remove/enable/disable。"""
+    if not is_tool_admin(conv_key):
+        return "MCP 插件管理仅限管理员使用。"
+    sub, _, arg = query.partition(" ")
+    sub = sub.lower().strip()
+    arg = arg.strip()
+    if sub in {"", "list"}:
+        return _mcp_list()
+    if sub == "add":
+        return _mcp_add(arg)
+    if sub == "remove":
+        return _mcp_remove(arg)
+    if sub == "enable":
+        return _mcp_enable(arg)
+    if sub == "disable":
+        return _mcp_disable(arg)
+    return MCP_HELP
+
+
+def _mcp_list() -> str:
+    rows = plugin_manager.list()
+    if not rows:
+        return f"还没有装入 MCP 插件。\n{MCP_HELP}"
+    lines = ["已装 MCP 插件(* 为启用):"]
+    for row in rows:
+        mark = "*" if row["enabled"] else " "
+        lines.append(f"{mark} {row['name']}({len(row['registered'])} 个工具) {row['status']}")
+    return "\n".join(lines)
+
+
+def _mcp_add(arg: str) -> str:
+    name, _, url = arg.partition(" ")
+    name, url = name.strip(), url.strip()
+    if not name or not url:
+        return "用法:/mcp add <名称> <url>"
+    try:
+        n = plugin_manager.install(name, {"type": "streamable_http", "url": url})
+    except (McpDiscoveryError, PluginError) as exc:
+        return f"装入失败:{exc}"
+    return f"已装入插件 {name},发现 {n} 个工具。"
+
+
+def _mcp_remove(arg: str) -> str:
+    name = arg.strip()
+    if not name:
+        return "用法:/mcp remove <名称>"
+    if plugin_manager.uninstall(name):
+        return f"已卸下插件 {name}。"
+    return f"没有名为「{name}」的插件,/mcp 查看已装插件。"
+
+
+def _mcp_enable(arg: str) -> str:
+    name = arg.strip()
+    if not name:
+        return "用法:/mcp enable <名称>"
+    try:
+        n = plugin_manager.enable(name)
+    except (McpDiscoveryError, PluginError) as exc:
+        return f"启用失败:{exc}"
+    return f"已启用插件 {name}({n} 个工具)。"
+
+
+def _mcp_disable(arg: str) -> str:
+    name = arg.strip()
+    if not name:
+        return "用法:/mcp disable <名称>"
+    if plugin_manager.disable(name):
+        return f"已停用插件 {name}(配置保留,/mcp enable 可恢复)。"
+    return f"没有名为「{name}」的插件,/mcp 查看已装插件。"
+
+
 def _generate_reply(client, messages: list[dict], tools_available: bool) -> str:
     """生成回复;tools_available 时支持多轮"调用工具 -> 回填结果 -> 继续"。"""
     if not tools_available or not TOOL_REGISTRY:
@@ -173,7 +262,7 @@ def handle_message(conv_key: str, text: str) -> str:
     """处理一条入站消息,返回回复文本。"""
     cmd = parse_command(text)
     if cmd is not None:
-        return _handle_command(cmd)
+        return _handle_command(conv_key, cmd)
 
     session_id = get_or_create(conv_key)
     # 先装配历史(不含本轮),再把本轮用户消息落库——顺序反了本轮会被重复注入
