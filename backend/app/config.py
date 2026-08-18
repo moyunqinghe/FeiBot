@@ -1,0 +1,22 @@
+"""全局配置:路径、密钥、渠道常量。
+
+密钥沿用 MVP 的方式:从环境变量读取,缺省用固定开发值;
+生产环境必须改成环境变量注入的强随机值。
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
+DATA_DIR = BASE_DIR / ".feibot"  # 运行时数据目录(sqlite 库等),不进 git
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+SKILLS_DIR = BASE_DIR / "skills"  # 项目根级 skill 内容目录
+
+# 渠道 token 落地加密的密钥
+CHANNEL_SECRET = os.environ.get("FEIBOT_CHANNEL_SECRET", "feibot-dev-secret")
+
+# 微信 ilink 默认接入地址(扫码确认后服务端可能下发区域化 baseurl)
+WECHAT_BASE_URL = "https://ilinkai.weixin.qq.com"

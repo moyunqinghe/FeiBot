@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# 运行时数据
+.feibot/
+.mvp_state.json
+
+# 系统
+.DS_Store

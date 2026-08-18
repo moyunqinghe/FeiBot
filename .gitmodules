@@ -1,0 +1,6 @@
+[submodule "backend/app/channels/wechat"]
+	path = backend/app/channels/wechat
+	url = https://github.com/moyunqinghe/wechat-ilink.git
+[submodule "backend/app/llm/llm_protocols"]
+	path = backend/app/llm/llm_protocols
+	url = https://github.com/moyunqinghe/llm-protocols.git
