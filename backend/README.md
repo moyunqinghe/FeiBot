@@ -40,6 +40,19 @@ agent 可以在对话里调用工具拿实时信息、执行操作。采用提�
 
 **安全**:任何能给 bot 发消息的微信用户都进得了对话,因此工具只对白名单开放(`config.is_tool_admin`,默认只有主人,可用 env `FEIBOT_TOOL_ADMINS` 逗号分隔覆盖)。非白名单会话连工具说明都看不到,纯聊天。`shell` 是高危能力——bot 进程有什么权限它就能做什么,务必守住白名单。
 
+### MCP 插件(装/卸远端工具)
+
+MCP server 以插件形式接入(`agent/tools/mcp_plugins.py`):`discover()` 取回的工具
+清单加 `{插件名}__` 前缀注册进同一注册表,与内置工具统一被 engine 注入与调用;
+配置持久化在 sqlite `mcp_plugins` 表,启动自动重载启用的插件。第一步为"定义的装/卸",
+远程执行(`tools/call`)为下一步。
+
+```python
+from app.agent.tools.mcp_plugins import plugin_manager
+plugin_manager.install("12306-mcp", {"type": "streamable_http", "url": "https://.../mcp"})
+plugin_manager.list(); plugin_manager.disable("12306-mcp"); plugin_manager.uninstall("12306-mcp")
+```
+
 ## 模型配置
 
 模型配置存 sqlite `model_configs` 表,api_key 加密落盘(密钥与渠道 token 同源于 env `FEIBOT_CHANNEL_SECRET`)。协议取值见 `llm_protocols.ModelApiProtocol`:`openai_chat_completions` / `openai_responses` / `anthropic_messages` / `gemini_generate_content`。
