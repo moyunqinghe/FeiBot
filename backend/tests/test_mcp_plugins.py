@@ -153,3 +153,28 @@ def test_enable_rediscovers_and_registers(manager, monkeypatch):
 def test_enable_missing_raises(manager):
     with pytest.raises(PluginError):
         manager.enable("ghost")
+
+
+def test_reload_updates_tool_set(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a", "b"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a", "c", "d"]))
+    assert manager.reload("p1") == 3
+    assert set(TOOL_REGISTRY) == {"p1__a", "p1__c", "p1__d"}
+
+
+def test_reload_missing_raises(manager):
+    with pytest.raises(PluginError):
+        manager.reload("ghost")
+
+
+def test_list_reports_plugins(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["a"]))
+    manager.install("p1", {"transport": "http", "url": "http://x"})
+    manager.install("p2", {"transport": "stdio", "command": "node"})
+    manager.disable("p2")
+    info = {row["name"]: row for row in manager.list()}
+    assert info["p1"]["enabled"] is True
+    assert info["p1"]["registered"] == ["p1__a"]
+    assert info["p2"]["enabled"] is False
+    assert info["p2"]["registered"] == []

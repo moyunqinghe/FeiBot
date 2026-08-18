@@ -125,3 +125,29 @@ class McpPluginManager:
         store.set_plugin_enabled(name, 1)
         self._status[name] = f"ok, {len(keys)} tools"
         return len(keys)
+
+    def reload(self, name: str) -> int:
+        """重新 discover 并 diff 更新已注册工具。不存在抛 PluginError。"""
+        row = store.get_plugin(name)
+        if row is None:
+            raise PluginError(f"插件不存在:{name}")
+        result = discover(json.loads(row["config_json"]))
+        self._remove_tools(name)
+        keys = self._register_tools(name, result.tools)
+        self._provenance[name] = keys
+        store.upsert_plugin(name, row["config_json"], row["enabled"])
+        self._status[name] = f"ok, {len(keys)} tools"
+        return len(keys)
+
+    def list(self) -> list[dict]:
+        """列出全部插件及状态(启用、已注册工具、最近加载结果)。"""
+        out = []
+        for row in store.list_plugins():
+            name = row["name"]
+            out.append({
+                "name": name,
+                "enabled": bool(row["enabled"]),
+                "registered": sorted(self._provenance.get(name, ())),
+                "status": self._status.get(name, ""),
+            })
+        return out
