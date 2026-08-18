@@ -178,3 +178,26 @@ def test_list_reports_plugins(manager, monkeypatch):
     assert info["p1"]["registered"] == ["p1__a"]
     assert info["p2"]["enabled"] is False
     assert info["p2"]["registered"] == []
+
+
+def test_load_enabled_registers_enabled_only_and_skips_failures(clean_registry, monkeypatch):
+    mgr = McpPluginManager()
+    # 预置三条库记录:p1 启用可连,p2 停用,p3 启用但 discover 失败
+    store.upsert_plugin("p1", json.dumps({"transport": "http", "url": "http://ok"}), 1)
+    store.upsert_plugin("p2", json.dumps({"transport": "http", "url": "http://off"}), 0)
+    store.upsert_plugin("p3", json.dumps({"transport": "http", "url": "http://bad"}), 1)
+
+    def fake_discover(cfg, **kw):
+        if cfg["url"] == "http://bad":
+            raise McpDiscoveryError("连不上", code="CONNECT_FAILED")
+        return _result(["a"])
+
+    monkeypatch.setattr(mcp_plugins, "discover", fake_discover)
+    mgr.load_enabled()  # 不应抛异常
+
+    assert "p1__a" in TOOL_REGISTRY
+    assert "p2__a" not in TOOL_REGISTRY
+    assert "p3__a" not in TOOL_REGISTRY
+    status = {row["name"]: row["status"] for row in mgr.list()}
+    assert status["p1"].startswith("ok")
+    assert "load failed" in status["p3"]

@@ -151,3 +151,27 @@ class McpPluginManager:
                 "status": self._status.get(name, ""),
             })
         return out
+
+    def load_enabled(self) -> None:
+        """启动钩子:重载所有启用插件;单个失败只记录,不拖累其他与启动。"""
+        for row in store.list_plugins():
+            if not row["enabled"]:
+                continue
+            name = row["name"]
+            try:
+                result = discover(json.loads(row["config_json"]))
+                self._remove_tools(name)
+                keys = self._register_tools(name, result.tools)
+                self._provenance[name] = keys
+                self._status[name] = f"ok, {len(keys)} tools"
+            except Exception as exc:  # noqa: BLE001 — 单个插件失败不影响整体
+                logger.warning("启动加载 MCP 插件 %s 失败:%s", name, exc)
+                self._status[name] = f"load failed: {exc}"
+
+
+# 模块级默认实例,供 main.py / 编程式调用
+plugin_manager = McpPluginManager()
+
+
+def load_enabled_plugins() -> None:
+    plugin_manager.load_enabled()
