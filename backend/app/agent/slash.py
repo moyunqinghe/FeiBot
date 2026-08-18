@@ -38,5 +38,7 @@ def parse_command(text: str) -> ChannelCommand | None:
         return ChannelCommand(kind="memory", query=query)
     if name in {"遗忘", "forget"}:
         return ChannelCommand(kind="forget", query=query)
+    if name == "mcp":
+        return ChannelCommand(kind="mcp", query=query)
     # 未识别的指令按帮助处理,引导用户看可用指令
     return ChannelCommand(kind="help", query=body)

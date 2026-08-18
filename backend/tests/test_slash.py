@@ -57,3 +57,24 @@ def test_model_command_with_name() -> None:
     assert cmd is not None
     assert cmd.kind == "model"
     assert cmd.query == "gpt5"
+
+
+def test_mcp_command_no_args() -> None:
+    cmd = parse_command("/mcp")
+    assert cmd is not None
+    assert cmd.kind == "mcp"
+    assert cmd.query == ""
+
+
+def test_mcp_command_list() -> None:
+    cmd = parse_command("/mcp list")
+    assert cmd is not None
+    assert cmd.kind == "mcp"
+    assert cmd.query == "list"
+
+
+def test_mcp_command_add_with_args() -> None:
+    cmd = parse_command("/mcp add foo http://x/mcp")
+    assert cmd is not None
+    assert cmd.kind == "mcp"
+    assert cmd.query == "add foo http://x/mcp"
