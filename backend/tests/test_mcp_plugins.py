@@ -1,4 +1,6 @@
 import json
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -219,3 +221,24 @@ def test_install_from_mcp_servers_batch(manager, monkeypatch):
 
 def test_install_from_mcp_servers_empty(manager):
     assert manager.install_from_mcp_servers({}) == {}
+
+
+_STDIO_MOCK = (
+    Path(__file__).resolve().parents[1] / "app" / "agent" / "mcp" / "tests" / "stdio_mock_server.py"
+)
+
+
+def test_integration_stdio_install_list_uninstall(manager):
+    config = {"transport": "stdio", "command": sys.executable, "args": [str(_STDIO_MOCK)]}
+    count = manager.install("mocksrv", config)
+    assert count == 3
+    assert set(TOOL_REGISTRY) == {
+        "mocksrv__echo", "mocksrv__sum", "mocksrv__product_lookup",
+    }
+    # 占位 handler 可调用且不炸
+    out = TOOL_REGISTRY["mocksrv__echo"].handler()
+    assert "远程执行尚未接入" in out
+
+    assert manager.uninstall("mocksrv") is True
+    assert TOOL_REGISTRY == {}
+    assert store.get_plugin("mocksrv") is None
