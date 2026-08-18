@@ -12,10 +12,12 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections import deque
 from collections.abc import Callable
 
+import httpx
 from wechat_ilink import (
     SESSION_EXPIRED_ERRCODE,
     WeChatApiError,
@@ -31,6 +33,8 @@ from wechat_ilink import (
 from app.config import CHANNEL_SECRET, WECHAT_BASE_URL
 from app.db import store
 
+logger = logging.getLogger(__name__)
+
 FERNET_KEY = derive_fernet_key(CHANNEL_SECRET)
 
 MAX_BACKOFF_SECONDS = 60.0  # 重连退避上限
@@ -43,6 +47,15 @@ KV_TOKEN_ENC = "wechat.bot_token_enc"
 KV_CURSOR = "wechat.cursor"
 
 
+def _new_client(base_url: str, bot_token: str = "") -> WeChatClient:
+    """构造渠道客户端:显式 transport,永远直连、不吃环境变量代理。
+
+    微信 iLink 是国内服务,请求又带着 bot_token 凭证:流量被 Clash 等代理
+    劫持时 TLS 握手会间歇性失败,凭证也不应流经第三方节点。
+    """
+    return WeChatClient(base_url, bot_token, transport=httpx.HTTPTransport())
+
+
 def get_bot_token() -> str:
     """从 kv 中解密 bot_token;没有则返回空串。"""
     enc = store.get_kv(KV_TOKEN_ENC)
@@ -51,7 +64,7 @@ def get_bot_token() -> str:
 
 def scan_login() -> dict:
     """走完整扫码流程,返回含新 token 的状态 dict。"""
-    client = WeChatClient(WECHAT_BASE_URL)
+    client = _new_client(WECHAT_BASE_URL)
     qr = client.get_bot_qrcode()
     print("\n请用微信扫码登录(在浏览器打开下面链接查看二维码):")
     print(qr["qrcode_img_content"])
@@ -113,18 +126,19 @@ def run_wechat_ingress(on_message: Callable[[str, str], str]) -> None:
         state = scan_login()
         save_state(state)
 
-    client = WeChatClient(state["base_url"], get_bot_token())
+    client = _new_client(state["base_url"], get_bot_token())
     seen_event_ids: deque[str] = deque(maxlen=DEDUP_CAPACITY)
     backoff = 2.0
 
-    print(f"开始长轮询(base_url={state['base_url']}),Ctrl+C 退出")
+    logger.info("开始长轮询(base_url=%s),Ctrl+C 退出", state["base_url"])
     try:
         while True:
             try:
                 resp = client.get_updates(state.get("cursor", ""))
-            except (WeChatApiError, OSError) as exc:
-                # 网络/协议错误:指数退避后重连
-                print(f"轮询异常:{exc},{backoff:.0f}s 后重试")
+            except (WeChatApiError, OSError, httpx.HTTPError) as exc:
+                # 网络/协议错误(含 TLS 失败、超时、代理抽风):指数退避后重试。
+                # 注意 httpx 的传输错误不是 OSError,必须显式捕获,否则循环直接崩
+                logger.warning("轮询异常:%s,%.0fs 后重试", exc, backoff)
                 time.sleep(backoff)
                 backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
                 continue
@@ -133,11 +147,11 @@ def run_wechat_ingress(on_message: Callable[[str, str], str]) -> None:
             errcode = resp.get("errcode") or resp.get("ret") or 0
             if errcode == SESSION_EXPIRED_ERRCODE:
                 # -14:会话过期,清空 token 重新扫码
-                print("会话已过期(-14),需要重新扫码")
+                logger.warning("会话已过期(-14),需要重新扫码")
                 state = scan_login()
                 save_state(state)
                 client.close()
-                client = WeChatClient(state["base_url"], get_bot_token())
+                client = _new_client(state["base_url"], get_bot_token())
                 continue
 
             for raw in resp.get("msgs") or []:
@@ -149,12 +163,23 @@ def run_wechat_ingress(on_message: Callable[[str, str], str]) -> None:
                 seen_event_ids.append(msg.event_id)
 
                 text = msg.text or "[非文本消息]"
-                print(f"收到({msg.from_user_id}): {text}")
+                logger.info("收到(%s): %s", msg.from_user_id, text)
                 try:
                     answer = on_message(msg.from_user_id, text)
-                    reply(client, msg, answer)
-                except WeChatApiError as exc:
-                    print(f"回复失败:{exc}")
+                except Exception:  # noqa: BLE001 — agent 层任何异常都不能杀死轮询循环
+                    logger.exception("agent 处理消息失败(conv=%s)", msg.from_user_id)
+                    try:
+                        reply(client, msg, "助理内部出了点问题,请稍后再试。")
+                    except Exception:  # noqa: BLE001
+                        logger.exception("错误提示发送也失败")
+                else:
+                    try:
+                        reply(client, msg, answer)
+                    except Exception:  # noqa: BLE001
+                        logger.exception("回复发送失败(conv=%s)", msg.from_user_id)
+                    else:
+                        # 发送成功后才记"回复":日志反映用户实际收到的内容
+                        logger.info("回复(%s): %s", msg.from_user_id, answer)
 
             # 整批处理完才推进游标:批内崩溃会在下轮重拉,由 seen_event_ids 去重
             state["cursor"] = str(resp.get("get_updates_buf") or state.get("cursor", ""))
