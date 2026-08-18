@@ -54,6 +54,8 @@ plugin_manager.install("12306-mcp", {"type": "streamable_http", "url": "https://
 plugin_manager.list(); plugin_manager.disable("12306-mcp"); plugin_manager.uninstall("12306-mcp")
 ```
 
+管理员可在微信里用 `/mcp` 系列指令管理 MCP 插件:`/mcp` 或 `/mcp list` 查看已装插件,`/mcp add <名称> <url>` 装入(仅支持 url/streamable_http 类),`/mcp remove <名称>` 卸下,`/mcp enable|disable <名称>` 启停。非管理员不可用。
+
 ## 模型配置
 
 模型配置存 sqlite `model_configs` 表,api_key 加密落盘(密钥与渠道 token 同源于 env `FEIBOT_CHANNEL_SECRET`)。协议取值见 `llm_protocols.ModelApiProtocol`:`openai_chat_completions` / `openai_responses` / `anthropic_messages` / `gemini_generate_content`。
