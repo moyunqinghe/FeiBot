@@ -35,6 +35,7 @@ LAUNCH_FAILED = "LAUNCH_FAILED"        # stdio 子进程启动失败
 CONNECT_FAILED = "CONNECT_FAILED"      # 连接中断/进程提前退出/HTTP 状态码异常
 TIMEOUT = "TIMEOUT"                    # 读/写/等待超时
 PROTOCOL_ERROR = "PROTOCOL_ERROR"      # JSON-RPC 错误、响应体不合法等协议问题
+TOOL_ERROR = "TOOL_ERROR"              # 工具自身返回 isError(协议本身正常)
 
 
 class McpDiscoveryError(Exception):
@@ -888,6 +889,34 @@ def _raise_json_rpc_error(payload: Mapping[str, Any]) -> None:
 
 def _stderr_text(collector: _StderrCollector | None) -> str:
     return collector.text() if collector is not None else ""
+
+
+def _content_text(content: Any) -> str:
+    """从 tools/call 的 content 列表里抽取 type==text 的文本,换行拼接。"""
+    if not isinstance(content, list):
+        return ""
+    parts = [
+        str(item.get("text") or "")
+        for item in content
+        if isinstance(item, Mapping) and item.get("type") == "text"
+    ]
+    return "\n".join(part for part in parts if part)
+
+
+def _extract_tool_result(raw: Any) -> Any:
+    """归一化 tools/call 的 result:isError 抛 TOOL_ERROR;优先 structuredContent,否则取文本。"""
+    if not isinstance(raw, Mapping):
+        return raw
+    if raw.get("isError"):
+        message = _content_text(raw.get("content")) or "MCP 工具返回 isError=true"
+        raise McpDiscoveryError(message, code=TOOL_ERROR)
+    structured = raw.get("structuredContent")
+    if structured is not None:
+        return structured
+    text = _content_text(raw.get("content"))
+    if text:
+        return text
+    return dict(raw)
 
 
 def _normalize_tool_definition(item: Mapping[str, Any]) -> DiscoveredTool:
