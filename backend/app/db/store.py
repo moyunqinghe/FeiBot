@@ -31,6 +31,14 @@ CREATE TABLE IF NOT EXISTS model_configs (
     api_key_enc TEXT NOT NULL,
     temperature REAL NOT NULL DEFAULT 1.0
 );
+CREATE TABLE IF NOT EXISTS messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role       TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
 """
 
 
@@ -136,3 +144,29 @@ def _model_row_to_dict(row: tuple) -> dict:
         "api_key_enc": row[4],
         "temperature": row[5],
     }
+
+
+# ---- 消息历史(messages 表,按会话存储对话轮次)----
+
+
+def add_message(session_id: str, role: str, content: str) -> None:
+    """往会话追加一条消息(role 为 user/assistant)。"""
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO messages (session_id, role, content, created_at)"
+            " VALUES (?, ?, ?, ?)",
+            (session_id, role, content, time.time()),
+        )
+
+
+def recent_messages(session_id: str, limit: int = 20) -> list[dict]:
+    """取会话最近 limit 条消息,按时间正序返回 [{"role","content"}, ...]。"""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT role, content FROM ("
+            "   SELECT id, role, content FROM messages"
+            "   WHERE session_id = ? ORDER BY id DESC LIMIT ?"
+            ") ORDER BY id",
+            (session_id, limit),
+        ).fetchall()
+    return [{"role": role, "content": content} for role, content in rows]
