@@ -8,6 +8,8 @@ from llm_protocols import ProtocolCallError
 from llm_protocols.client import LLMClient as ProtocolLLMClient
 
 from app.agent import engine
+from app.agent import profile
+from app.agent.memory.store import MemoryStore
 from app.db import store
 from app.llm import registry
 
@@ -65,6 +67,7 @@ def test_engine_with_config_calls_llm_protocols(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(ProtocolLLMClient, "complete", fake_complete)
+    monkeypatch.setattr(engine, "distill_memory", lambda *a: [])  # 提炼单独测
     reply = engine.handle_message("conv-1", "你好")
     assert reply == "模型回复"
     assert captured["model"] == "gpt-5"
@@ -90,3 +93,43 @@ def test_session_is_created_and_reused() -> None:
     first = store.get_or_create_session("conv-1")
     assert store.get_or_create_session("conv-1") == first
     assert store.get_or_create_session("conv-2") != first
+
+
+def test_distill_triggered_after_round(monkeypatch) -> None:
+    """配置了模型时,每轮结束后触发一次记忆提炼。"""
+    _add_model()
+
+    def fake_complete(self, request):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="模型回复"))]
+        )
+
+    monkeypatch.setattr(ProtocolLLMClient, "complete", fake_complete)
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        engine, "distill_memory", lambda client, u, a: calls.append((u, a)) or []
+    )
+    engine.handle_message("conv-1", "我叫老莫")
+    assert calls == [("我叫老莫", "模型回复")]
+
+
+def test_distill_skipped_for_echo(monkeypatch) -> None:
+    """EchoLLM 兜底(未配置模型)时跳过提炼。"""
+    calls: list[tuple] = []
+    monkeypatch.setattr(
+        engine, "distill_memory", lambda client, u, a: calls.append((u, a)) or []
+    )
+    engine.handle_message("conv-1", "你好")
+    assert calls == []
+
+
+def test_memory_and_forget_commands() -> None:
+    assert "还没有关于你的记忆" in engine.handle_message("conv-1", "/记忆")
+    MemoryStore().add(["用户在做 SaaS"])
+    profile.update_profile({"称呼": "老莫"})
+    reply = engine.handle_message("conv-1", "/memory")
+    assert "用户在做 SaaS" in reply
+    assert "称呼:老莫" in reply  # /记忆 同时展示画像
+    assert "已清空关于你的全部记忆与画像" in engine.handle_message("conv-1", "/遗忘")
+    assert MemoryStore().load() == []
+    assert profile.profile_summary() == {}  # 画像一并清空

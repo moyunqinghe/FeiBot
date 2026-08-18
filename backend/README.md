@@ -8,20 +8,37 @@
 - `app/config.py` — 路径、密钥(env `FEIBOT_CHANNEL_SECRET`)、渠道常量
 - `app/api/` — HTTP API 层(占位,后续引入 FastAPI)
 - `app/channels/` — 渠道协议层:微信扫码登录 + 长轮询收发(`ingress.py`),协议封装在 `channels/wechat/`(wechat-ilink 包)
-- `app/agent/` — agent 编排层:引擎、slash 指令、上下文、记忆、会话、提示词、skills、tools、MCP(部分为占位)
+- `app/agent/` — agent 编排层:引擎、slash 指令、上下文、记忆、会话、提示词、skills、tools(内置工具 + 白名单门控)、MCP(占位)
 - `app/llm/` — LLM 层:`client.py` 对上层只暴露 `generate(messages)`(经 `llm_protocols/` 通用协议包真实调用,无配置回退 EchoLLM);`registry.py` 管模型配置存取/加解密;`manage.py` 是配置 CLI;`llm_protocols/` 为独立协议包(勿改)
-- `app/db/` — sqlite 持久化:kv 表(渠道 token/游标、当前模型)+ sessions 表 + model_configs 表
+- `app/db/` — sqlite 持久化:kv 表(渠道 token/游标、当前模型)+ sessions 表 + model_configs 表 + messages 表(会话历史)
 - `app/jobs/` — 后台任务层(占位:outbox 投递、定时任务)
 - `skills/` — 项目根级 skill 内容目录(每个子目录一个 SKILL.md)
-- `USER.md` — 用户画像(见下)
+- `USER.md` — 用户画像,由助理根据对话自动维护(见下)
 - `.feibot/` — 运行时数据目录(sqlite 库),不进 git
 - `tests/` — 回归测试
 
 依赖方向:`channels` → `agent` → `llm` / `db`;agent 层零渠道依赖,engine 返回文本、ingress 负责分片发送。
 
-## USER.md 用户画像
+## 用户画像与长期记忆(自动形成,用户只聊天不写文件)
 
-`backend/USER.md` 是项目级内容文件(进 git,仿 AGENTS.md 惯例)。首次运行时若不存在,自动创建中文模板;填写后内容会作为 system 消息注入每轮对话(前缀"以下是用户画像,请在回复中参考:")。HTML 注释和留空的小节不会被注入。
+每轮对话结束后,`agent/memory/distill.py` 用当前模型做一次提炼,一次调用产出两类结果:
+
+- **profile** — 用户的稳定属性(称呼/角色/工作习惯/沟通偏好/时区),写入 `backend/USER.md` 对应小节;
+- **facts** — 其他值得长期记住的事实(项目背景、正在进行的工作等),追加进 `backend/MEMORY.md`。
+
+两者都会在下一轮作为 system 消息注入上下文(画像前缀"以下是用户画像,请在回复中参考:",记忆前缀"以下是你记住的关于用户的事:")。因此用户只需跟助理聊天,画像和记忆自动积累,无需手写任何文件。
+
+- `USER.md` / `MEMORY.md` 都是项目级内容文件(进 git,仿 AGENTS.md 惯例),可读可手改;手工修改会被保留,直到对应内容下次被对话更新。
+- 提炼为 best-effort:失败只记日志,不影响主回复。提炼 prompt 里带已有画像与记忆原文,用于去重和覆盖旧值。
+- `/记忆` 查看当前画像与记忆;`/遗忘` 一键清空两者。
+
+## 工具(仅白名单可用)
+
+agent 可以在对话里调用工具拿实时信息、执行操作。采用提示词 JSON 约定(`llm_protocols` 是纯协议层不支持原生 function calling):白名单会话的上下文注入工具说明,模型输出一行 `{"tool": "...", "args": {...}}`,engine 执行后把结果回填给模型,如此循环直到给出自然语言回复(上限 3 轮)。
+
+内置工具(`agent/tools/builtin.py`):`current_time` 当前时间、`pwd` 工作目录、`list_dir` 列目录、`shell` 执行命令(30s 超时、输出截断、无 stdin)。加新工具:写 handler + `register_tool(ToolSpec(...))`。
+
+**安全**:任何能给 bot 发消息的微信用户都进得了对话,因此工具只对白名单开放(`config.is_tool_admin`,默认只有主人,可用 env `FEIBOT_TOOL_ADMINS` 逗号分隔覆盖)。非白名单会话连工具说明都看不到,纯聊天。`shell` 是高危能力——bot 进程有什么权限它就能做什么,务必守住白名单。
 
 ## 模型配置
 
