@@ -1,4 +1,4 @@
-"""sqlite 持久化:kv 表(渠道 token/游标)+ sessions 表(会话)。
+"""sqlite 持久化:kv / sessions / model_configs / messages / mcp_plugins。
 
 只用标准库 sqlite3;每次调用新开连接,简单且对当前单线程轮询足够。
 """
@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS messages (
     role       TEXT NOT NULL,
     content    TEXT NOT NULL,
     created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS mcp_plugins (
+    name        TEXT PRIMARY KEY,
+    config_json TEXT NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+    added_at    REAL NOT NULL,
+    updated_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
 """
@@ -170,3 +177,68 @@ def recent_messages(session_id: str, limit: int = 20) -> list[dict]:
             (session_id, limit),
         ).fetchall()
     return [{"role": role, "content": content} for role, content in rows]
+
+
+# ---- MCP 插件(mcp_plugins 表;config_json 为连接配置的 JSON 文本)----
+
+
+def upsert_plugin(name: str, config_json: str, enabled: int) -> None:
+    """写入 MCP 插件(同名覆盖);首次写入记 added_at,每次刷新 updated_at。"""
+    now = time.time()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO mcp_plugins (name, config_json, enabled, added_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?)"
+            " ON CONFLICT(name) DO UPDATE SET"
+            " config_json = excluded.config_json, enabled = excluded.enabled,"
+            " updated_at = excluded.updated_at",
+            (name, config_json, enabled, now, now),
+        )
+
+
+def get_plugin(name: str) -> dict | None:
+    """按名字取插件行(dict);不存在返回 None。"""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT name, config_json, enabled, added_at, updated_at"
+            " FROM mcp_plugins WHERE name = ?",
+            (name,),
+        ).fetchone()
+    return _plugin_row_to_dict(row) if row else None
+
+
+def list_plugins() -> list[dict]:
+    """列出全部插件行(按名字排序)。"""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT name, config_json, enabled, added_at, updated_at"
+            " FROM mcp_plugins ORDER BY name"
+        ).fetchall()
+    return [_plugin_row_to_dict(row) for row in rows]
+
+
+def delete_plugin(name: str) -> bool:
+    """删除插件;返回是否确实删掉了行。"""
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM mcp_plugins WHERE name = ?", (name,))
+        return cur.rowcount > 0
+
+
+def set_plugin_enabled(name: str, enabled: int) -> bool:
+    """切换插件启用状态;返回是否命中已有行。"""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE mcp_plugins SET enabled = ?, updated_at = ? WHERE name = ?",
+            (enabled, time.time(), name),
+        )
+        return cur.rowcount > 0
+
+
+def _plugin_row_to_dict(row: tuple) -> dict:
+    return {
+        "name": row[0],
+        "config_json": row[1],
+        "enabled": row[2],
+        "added_at": row[3],
+        "updated_at": row[4],
+    }

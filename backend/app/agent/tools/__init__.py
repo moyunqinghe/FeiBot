@@ -14,6 +14,7 @@ from app.agent.tools.registry import (
     get_tool,
     register_tool,
     render_tools_prompt,
+    unregister_tool,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "parse_tool_call",
     "register_tool",
     "render_tools_prompt",
+    "unregister_tool",
 ]

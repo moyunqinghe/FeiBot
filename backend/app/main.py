@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from app.agent.engine import handle_message
+from app.agent.tools.mcp_plugins import load_enabled_plugins
 from app.channels.ingress import run_wechat_ingress
 
 
@@ -23,6 +24,8 @@ def main() -> None:
     # 纯噪音,压到 WARNING;openai._base_client 的重试 INFO 有诊断意义,保留
     for noisy in ("httpx", "httpx2"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+    # 启动时重载启用的 MCP 插件
+    load_enabled_plugins()
     run_wechat_ingress(handle_message)
 
 

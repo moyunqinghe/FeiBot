@@ -31,6 +31,11 @@ def register_tool(spec: ToolSpec) -> ToolSpec:
     return spec
 
 
+def unregister_tool(name: str) -> bool:
+    """注销工具;返回是否确实移除了已注册的工具。"""
+    return TOOL_REGISTRY.pop(name, None) is not None
+
+
 def get_tool(name: str) -> ToolSpec | None:
     """按名字取工具;不存在返回 None。"""
     return TOOL_REGISTRY.get(name)
