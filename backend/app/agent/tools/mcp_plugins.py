@@ -168,6 +168,17 @@ class McpPluginManager:
                 logger.warning("启动加载 MCP 插件 %s 失败:%s", name, exc)
                 self._status[name] = f"load failed: {exc}"
 
+    def install_from_mcp_servers(self, payload: dict) -> dict:
+        """吃标准 {"mcpServers": {name: {...}}} 信封批量装;逐项记录成败。"""
+        servers = payload.get("mcpServers") or {}
+        results: dict[str, object] = {}
+        for name, cfg in servers.items():
+            try:
+                results[name] = self.install(name, cfg)
+            except (PluginError, McpDiscoveryError) as exc:
+                results[name] = f"failed: {exc}"
+        return results
+
 
 # 模块级默认实例,供 main.py / 编程式调用
 plugin_manager = McpPluginManager()

@@ -201,3 +201,21 @@ def test_load_enabled_registers_enabled_only_and_skips_failures(clean_registry, 
     status = {row["name"]: row["status"] for row in mgr.list()}
     assert status["p1"].startswith("ok")
     assert "load failed" in status["p3"]
+
+
+def test_install_from_mcp_servers_batch(manager, monkeypatch):
+    monkeypatch.setattr(mcp_plugins, "discover", lambda cfg, **kw: _result(["t"]))
+    payload = {
+        "mcpServers": {
+            "train": {"type": "streamable_http", "url": "http://x/mcp"},
+            "bad name!": {"type": "stdio", "command": "node"},
+        }
+    }
+    results = manager.install_from_mcp_servers(payload)
+    assert results["train"] == 1
+    assert str(results["bad name!"]).startswith("failed")
+    assert "train__t" in TOOL_REGISTRY
+
+
+def test_install_from_mcp_servers_empty(manager):
+    assert manager.install_from_mcp_servers({}) == {}
