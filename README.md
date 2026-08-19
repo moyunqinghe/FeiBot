@@ -1,4 +1,4 @@
-# feibot
+# FeiBot
 
 微信个人助理 agent harness：微信渠道接入 + agent 编排 + LLM + 工具/MCP，
 分层单向依赖、协议层可复用。
