@@ -21,8 +21,9 @@ class SkillImporterError(Exception):
 
     def __init__(
         self,
-        code: str,
         message: str,
+        *,
+        code: str,
         cause: BaseException | None = None,
     ) -> None:
         super().__init__(message)

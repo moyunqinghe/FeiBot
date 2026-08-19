@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SkillFile(BaseModel):
     """One file of a skill package. Field names mirror the host's GeneralSkillFile."""
+
+    model_config = ConfigDict(frozen=True)
 
     path: str
     content: str
@@ -16,7 +18,10 @@ class SkillFile(BaseModel):
 
 @dataclass(frozen=True)
 class SkillPackage:
-    """Normalized skill package resolved from a remote source."""
+    """Normalized skill package resolved from a remote source.
+
+    source_kind: "platform" | "github" | "url" | "shorthand" | "upload"，默认 "url"。
+    """
 
     files: tuple[SkillFile, ...]
     skill_markdown: str
