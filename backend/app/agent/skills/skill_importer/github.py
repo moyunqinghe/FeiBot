@@ -80,10 +80,12 @@ def load_github_source(parsed, *, http: _Http, config: _Config) -> list[SkillFil
         try:
             return _download_github_directory(http, config, owner, repo, branch, subtree)
         except SkillImporterError as exc:
-            if exc.code == ERROR_SKILL_MD_MISSING:
-                raise
             errors.append(exc)
-    return _download_github_archive(http, config, owner, repo, ["main", "master"], subtree)
+    try:
+        return _download_github_archive(http, config, owner, repo, ["main", "master"], subtree)
+    except SkillImporterError:
+        # archive 兜底失败时优先抛目录遍历阶段的原始错误（如 SKILL_MD_MISSING）
+        raise errors[0] if errors else None
 
 
 def _resolve_github_branch(http: _Http, parts: list[str]) -> tuple[str, str]:
@@ -136,8 +138,8 @@ def _download_github_directory(
     try:
         return _download_github_directory_contents(http, config, owner, repo, branch, subtree)
     except SkillImporterError as api_error:
-        if api_error.code == ERROR_SKILL_MD_MISSING:
-            raise
+        # Contents API 分页/截断可能漏掉 SKILL.md，任何失败（含
+        # SKILL_MD_MISSING）都回退 archive —— 与原宿主实现行为一致
         try:
             return _download_github_archive(http, config, owner, repo, [branch], subtree)
         except SkillImporterError:

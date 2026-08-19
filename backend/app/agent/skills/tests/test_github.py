@@ -89,6 +89,24 @@ def test_github_directory_without_skill_md_raises(make_importer) -> None:
     assert exc.value.code == ERROR_SKILL_MD_MISSING
 
 
+def test_github_directory_missing_skill_md_falls_back_to_archive(make_importer) -> None:
+    """Contents API 列表缺 SKILL.md 时回退 archive（原宿主行为，API 可能分页截断）。"""
+    importer = make_importer(
+        {
+            "https://api.github.com/repos/owner/repo/contents?ref=main": [
+                {"type": "file", "path": "readme.md", "size": 5,
+                 "download_url": "https://raw.githubusercontent.com/owner/repo/main/readme.md"}
+            ],
+            "https://raw.githubusercontent.com/owner/repo/main/readme.md": "hello",
+            "https://github.com/owner/repo/archive/refs/heads/main.zip": make_zip(
+                {"repo-main/SKILL.md": "# via archive\n"}
+            ),
+        }
+    )
+    pkg = importer.import_skill("owner/repo")
+    assert pkg.skill_markdown == "# via archive\n"
+
+
 def test_github_blob_404_maps_http_error(make_importer) -> None:
     importer = make_importer(
         {
