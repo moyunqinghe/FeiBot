@@ -44,6 +44,32 @@ for tool in result.tools:
     print(tool.name, tool.description, tool.input_schema)
 ```
 
+## 在 feibot 中使用:/mcp 聊天指令(仅管理员)
+
+装好的 feibot 里,管理员会话可以直接在微信里用斜杠指令管理 MCP 插件,无需写代码
+(非管理员会话会被拒绝)。装入的工具以 `<插件名>__<工具名>` 注册进工具注册表,之后
+用自然语言即可调用。
+
+| 指令 | 作用 |
+| --- | --- |
+| `/mcp` 或 `/mcp list` | 列出已装插件(启用标记 + 工具数 + 状态) |
+| `/mcp add <名称> <url>` | 装入插件(仅支持 url/streamable_http 类) |
+| `/mcp remove <名称>` | 卸下插件 |
+| `/mcp enable <名称>` | 启用已停用的插件 |
+| `/mcp disable <名称>` | 停用插件(保留配置,工具暂移出) |
+
+示例(装入高德地图 MCP):
+
+```
+/mcp add amap-maps https://mcp.api-inference.modelscope.net/4dd67334a65741/mcp
+/mcp list
+/mcp remove amap-maps
+```
+
+> 聊天装入仅支持 url/streamable_http 类 server;stdio 类(本地命令)请用编程式
+> `plugin_manager.install`(见宿主 `app/agent/tools/mcp_plugins.py`)。指令在运行中的
+> bot 内立即生效并落库,重启后自动重载启用的插件。
+
 ## 唯一入口 discover()
 
 ```python
