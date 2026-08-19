@@ -13,6 +13,12 @@ from skill_importer.errors import (
 )
 from skill_importer.model import SkillFile, SkillPackage
 from skill_importer.metadata import metadata_text, parse_skill_metadata, slugify, source_name
+from skill_importer.ziputil import (
+    clean_package_path,
+    files_from_zip,
+    normalize_skill_files,
+    skill_markdown,
+)
 
 __all__ = [
     "ERROR_CONNECT_FAILED",
@@ -32,4 +38,8 @@ __all__ = [
     "parse_skill_metadata",
     "slugify",
     "source_name",
+    "clean_package_path",
+    "files_from_zip",
+    "normalize_skill_files",
+    "skill_markdown",
 ]
