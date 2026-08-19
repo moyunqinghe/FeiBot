@@ -395,10 +395,6 @@ def _extract_skill_source_from_html(text: str, base_url: str) -> str | None:
             return cleaned
         if lower_path.endswith(".zip"):
             return cleaned
-    for candidate in candidates:
-        cleaned = candidate.strip().rstrip("),.;]")
-        if cleaned:
-            return cleaned
     return None
 
 

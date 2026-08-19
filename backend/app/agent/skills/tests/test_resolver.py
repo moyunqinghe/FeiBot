@@ -92,11 +92,42 @@ def test_import_plain_html_rejected(make_importer) -> None:
     assert exc.value.code == ERROR_HTML_NOT_SKILL
 
 
-def test_import_redirect_loop_detected(make_importer) -> None:
+def test_import_html_with_only_unrelated_url_rejected(make_importer) -> None:
+    """HTML 中只有非技能亲和性 URL（正文提及/跟踪链接）时必须拒绝，不得跟随。"""
     importer = make_importer(
         {
-            "https://a.example/skill": "<html><a href='https://b.example/skill'>b</a></html>",
-            "https://b.example/skill": "<html><a href='https://a.example/skill'>a</a></html>",
+            "https://platform.ai/skill/weather": (
+                '<html>see https://example.com/blog for context</html>'
+            )
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://platform.ai/skill/weather")
+    assert exc.value.code == ERROR_HTML_NOT_SKILL
+
+
+def test_import_html_first_link_is_tracker_still_finds_skill_link(make_importer) -> None:
+    """无亲和性 URL 不得抢占真正的技能包链接。"""
+    importer = make_importer(
+        {
+            "https://platform.ai/skill/weather": (
+                '<html><img src="https://tracker.example/pixel.gif">'
+                '<a href="https://raw.githubusercontent.com/o/r/main/SKILL.md">dl</a></html>'
+            ),
+            "https://raw.githubusercontent.com/o/r/main/SKILL.md": "# raw\n",
+        }
+    )
+    pkg = importer.import_skill("https://platform.ai/skill/weather")
+    assert pkg.skill_markdown == "# raw\n"
+
+
+def test_import_redirect_loop_detected(make_importer) -> None:
+    endpoint = "https://wry-manatee-359.convex.site/api/v1/download"
+    importer = make_importer(
+        {
+            "https://a.example/skill": f'<html><a href="{endpoint}?slug=one">x</a></html>',
+            f"{endpoint}?slug=one": f'<html><a href="{endpoint}?slug=two">y</a></html>',
+            f"{endpoint}?slug=two": f'<html><a href="{endpoint}?slug=one">z</a></html>',
         }
     )
     with pytest.raises(SkillImporterError) as exc:
