@@ -472,7 +472,7 @@ from conftest import make_zip
 
 def test_normalize_single_markdown_becomes_skill_md() -> None:
     files = normalize_skill_files([], markdown="# hello")
-    assert files == [SkillFile(path="SKILL.md", content="# hello", size=8, mime_type="text/markdown")]
+    assert files == [SkillFile(path="SKILL.md", content="# hello", size=7, mime_type="text/markdown")]
 
 
 def test_normalize_requires_content_when_no_files() -> None:
@@ -758,6 +758,12 @@ git commit -m "feat(skills): zip 解包与技能包归一化工具
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
 
+> **Task 3 质量修正（code review 后追加，代码以本段为准，替代上文 files_from_zip/normalize 相应写法）**
+>
+> 1. `files_from_zip`：每个 `relative` 过 `_clean_package_path`（zip-slip 防御，非法路径整包拒绝）；单文件以**实际解压长度** `len(raw)` 复核 `max_file_bytes`（防 data-descriptor 伪造头绕过）并以实际长度记 `size`；新增可选参数 `max_total_bytes: int | None = None`，为 `None` 时默认 `max_file_bytes * max_files`，累计已读字节超限即 break。
+> 2. `normalize_skill_files`：docstring 声明"仅保留 base_dir 子树，兄弟目录（同前缀不同目录）静默丢弃——继承自原宿主行为"。
+> 3. 新增测试：`test_files_from_zip_rejects_zip_slip`、`test_normalize_drops_sibling_of_skill_root`。
+
 ---
 
 ## Task 4: HTTP 层 + import_skill 分发（平台 / owner-repo / raw md / zip / HTML 跳转）
@@ -911,6 +917,8 @@ def test_import_too_large_maps_to_too_large_error(make_importer) -> None:
 
 Run: `cd /Users/moyunqinghe/个人/学习/feibot/backend/app/agent/skills && python -m pytest tests/test_resolver.py -q`
 Expected: FAIL，`ModuleNotFoundError: No module named 'skill_importer.resolver'`
+
+> **⚠️ 签名约定（Task 1 修正 `83132a8` 后强制）**：`SkillImporterError` 一律用 `SkillImporterError(message, *, code=..., cause=...)`。下文 resolver 代码块里出现的 `SkillImporterError(ERROR_X, "msg")` / `SkillImporterError(ERROR_X, "msg", cause=exc)` 是位置参数简写，实现时必须转换为 `SkillImporterError("msg", code=ERROR_X)` / `SkillImporterError("msg", code=ERROR_X, cause=exc)`。
 
 - [ ] **Step 3: 实现 resolver.py**
 
@@ -1397,6 +1405,8 @@ def test_github_directory_without_skill_md_raises(make_importer) -> None:
 Run: `cd /Users/moyunqinghe/个人/学习/feibot/backend/app/agent/skills && python -m pytest tests/test_github.py -q`
 Expected: FAIL，`ModuleNotFoundError: No module named 'skill_importer.github'`
 
+> **⚠️ 签名约定**：同上，`SkillImporterError(message, *, code=..., cause=...)`；下文 github.py 代码块的 `SkillImporterError(ERROR_X, "msg")` 位置写法需按此转换。
+
 - [ ] **Step 3: 实现 github.py**
 
 创建 `skill_importer/github.py`：
@@ -1614,6 +1624,13 @@ git commit -m "feat(skills): GitHub 技能源加载(repo/tree/blob/raw/archive, 
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
+
+> **Task 4/5 质量修正（code review 后追加，代码以本段为准）**
+>
+> 1. **SSRF 守卫**：`resolver.py` 新增 `_assert_public_target(url)`（scheme 限 http/https；host 为 IP 字面量时拒绝非 `is_global`；hostname 尝试 `socket.getaddrinfo` 解析，全部解析结果均非 global 时拒绝，解析失败放行）。`_Http.download` 改为：客户端 `follow_redirects=False`，每次请求前过守卫，手动跟随重定向（`urljoin` 拼 location，最多 10 跳，超限 `ERROR_REDIRECT_LOOP`），每跳前再过守卫。`download`/`download_json` 共用，覆盖 platform source_url、HTML 回退链接、GitHub download_url 三来源。
+> 2. **archive 聚合错误码**：`github._download_github_archive` 聚合 code 按优先级 `HTTP_ERROR` > `CONNECT_FAILED` > 首个子错误，不再一律 `CONNECT_FAILED`。
+> 3. 新增测试：`test_download_rejects_private_ip_literal`、`test_download_follows_redirect_with_guard`、`test_download_rejects_redirect_to_private`、`test_github_blob_404_maps_http_error`。
+> 4. 已知可接受项（登记）：`_download_github_directory` 目录遍历失败回退 archive 会吞掉 archive 真因（I-3）；`SkillImporter` 同步 client 多线程共享连接池受限（M-1，docstring 已注明）。
 
 ---
 
