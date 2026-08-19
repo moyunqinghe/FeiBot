@@ -37,3 +37,28 @@ def test_slugify() -> None:
 def test_source_name() -> None:
     assert source_name("https://example.com/weather.zip") == "weather"
     assert source_name("weather-pack") == "weather-pack"
+
+
+def test_source_name_query_string_url() -> None:
+    assert source_name("https://example.com/weather.zip?v=1") == "weather"
+
+
+def test_source_name_trailing_slash_returns_directory() -> None:
+    assert source_name("https://example.com/skills/") == "skills"
+
+
+def test_source_name_upload_prefix_via_scheme() -> None:
+    assert source_name("upload:myfile.md") == "myfile"
+
+
+def test_slugify_keeps_dash_and_underscore() -> None:
+    assert slugify("a--b__c  d") == "a--b__c-d"
+
+
+def test_slugify_all_symbols_falls_back() -> None:
+    assert slugify("!!!") == "general-skill"
+
+
+def test_parse_metadata_strips_quotes() -> None:
+    meta = parse_skill_metadata('---\nname: "X"\n---\n')
+    assert meta["name"] == "X"

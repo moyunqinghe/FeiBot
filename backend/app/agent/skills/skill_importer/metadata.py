@@ -5,6 +5,12 @@ from urllib.parse import urlparse
 
 
 def parse_skill_metadata(markdown: str) -> dict[str, object]:
+    """Parse single-line YAML-like frontmatter (``---`` block).
+
+    Only supports one ``key: value`` per line, quoted/scalar string values and
+    ``[a, b]`` comma-separated lists. Multi-line values and comma-in-quotes
+    are not supported.
+    """
     lines = markdown.splitlines()
     if not lines or lines[0].strip() != "---":
         return {}
@@ -44,9 +50,8 @@ def slugify(value: str) -> str:
 
 
 def source_name(source: str) -> str:
+    """Derive a display-name hint from a source string (last path segment)."""
     parsed = urlparse(source)
     path = parsed.path if parsed.scheme else source
     cleaned = path.rstrip("/").rsplit("/", 1)[-1].removesuffix(".zip").removesuffix(".md")
-    if cleaned.startswith("upload:"):
-        cleaned = cleaned.removeprefix("upload:")
     return cleaned or "open-platform-skill"
