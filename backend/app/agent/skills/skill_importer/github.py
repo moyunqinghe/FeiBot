@@ -75,17 +75,33 @@ def load_github_source(parsed, *, http: _Http, config: _Config) -> list[SkillFil
             )
         ]
     subtree = "/".join(parts[2:]) if len(parts) > 2 else ""
+    branches = _candidate_default_branches(http, owner, repo)
     errors: list[SkillImporterError] = []
-    for branch in ["main", "master"]:
+    for branch in branches:
         try:
             return _download_github_directory(http, config, owner, repo, branch, subtree)
         except SkillImporterError as exc:
             errors.append(exc)
     try:
-        return _download_github_archive(http, config, owner, repo, ["main", "master"], subtree)
+        return _download_github_archive(http, config, owner, repo, branches, subtree)
     except SkillImporterError:
         # archive 兜底失败时优先抛目录遍历阶段的原始错误（如 SKILL_MD_MISSING）
         raise errors[0] if errors else None
+
+
+def _candidate_default_branches(http: _Http, owner: str, repo: str) -> list[str]:
+    """默认分支候选：优先仓库真实默认分支，回退 main/master 猜测。"""
+    try:
+        payload = http.download_json(
+            f"https://api.github.com/repos/{quote(owner)}/{quote(repo)}"
+        )
+    except SkillImporterError:
+        payload = None
+    default_branch = ""
+    if isinstance(payload, dict):
+        default_branch = str(payload.get("default_branch") or "")
+    candidates = [default_branch] if default_branch else []
+    return candidates + [b for b in ("main", "master") if b not in candidates]
 
 
 def _resolve_github_branch(http: _Http, parts: list[str]) -> tuple[str, str]:

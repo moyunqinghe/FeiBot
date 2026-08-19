@@ -74,6 +74,26 @@ def test_github_repo_root_falls_back_to_archive(make_importer) -> None:
     assert pkg.skill_markdown == "# archive\n"
 
 
+def test_github_custom_default_branch_resolved_via_repo_api(make_importer) -> None:
+    """默认分支非 main/master（如 develop）时，通过 repo API 的 default_branch 解析。"""
+    importer = make_importer(
+        {
+            "https://api.github.com/repos/owner/repo": {"default_branch": "develop"},
+            "https://api.github.com/repos/owner/repo/contents?ref=develop": [
+                {
+                    "type": "file",
+                    "path": "SKILL.md",
+                    "size": 10,
+                    "download_url": "https://raw.githubusercontent.com/owner/repo/develop/SKILL.md",
+                }
+            ],
+            "https://raw.githubusercontent.com/owner/repo/develop/SKILL.md": "# develop\n",
+        }
+    )
+    pkg = importer.import_skill("owner/repo")
+    assert pkg.skill_markdown == "# develop\n"
+
+
 def test_github_directory_without_skill_md_raises(make_importer) -> None:
     importer = make_importer(
         {
