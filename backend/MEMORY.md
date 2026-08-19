@@ -4,3 +4,4 @@
 <!-- 每条记忆一行,格式为 "- " 列表项。 -->
 - 用户当前工作路径为 /Users/moyunqinghe/个人/学习/feibot/backend，涉及 feibot backend 项目。
 - 用户正在考虑为 feibot backend 项目对接 MCP（Model Context Protocol）。
+- 用户可能在深圳简上村（龙华区）
