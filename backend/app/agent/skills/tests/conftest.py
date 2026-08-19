@@ -1,0 +1,48 @@
+from __future__ import annotations
+
+from io import BytesIO
+from zipfile import ZipFile
+
+import httpx
+import pytest
+
+
+def make_zip(files: dict[str, str]) -> bytes:
+    buf = BytesIO()
+    with ZipFile(buf, "w") as archive:
+        for path, content in files.items():
+            archive.writestr(path, content)
+    return buf.getvalue()
+
+
+def make_transport(routes: dict[str, object]) -> httpx.MockTransport:
+    """routes: {url: response}; 响应为 bytes/str/httpx.Response，未命中返回 404。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        entry = routes.get(str(request.url))
+        if entry is None:
+            return httpx.Response(404, text="not found")
+        if isinstance(entry, httpx.Response):
+            return entry
+        return httpx.Response(200, content=entry)
+
+    return httpx.MockTransport(handler)
+
+
+@pytest.fixture
+def make_importer():
+    def _make(routes: dict[str, object]):
+        from skill_importer import SkillImporter
+
+        return SkillImporter(transport=make_transport(routes))
+
+    return _make
+
+
+@pytest.fixture
+def importer(make_importer):
+    return make_importer({})
+
+
+def files_dict(pkg) -> dict[str, str]:
+    return {file.path: file.content for file in pkg.files}
