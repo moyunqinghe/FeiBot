@@ -333,7 +333,8 @@ def _assert_public_target(url: str) -> None:
     except socket.gaierror:
         return  # 解析失败由后续 CONNECT_FAILED 兜底，不额外拦截
     ips = [ipaddress.ip_address(info[4][0]) for info in resolved]
-    if ips and all(not ip.is_global for ip in ips):
+    if any(not ip.is_global for ip in ips):
+        # 任一应答为非公网地址即拒绝：混合公网/私网应答常见于 rebinding 攻击
         raise SkillImporterError(
             f"source resolves to a non-public address: {host}", code=ERROR_SOURCE_INVALID
         )

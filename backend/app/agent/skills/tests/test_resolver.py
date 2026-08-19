@@ -1,5 +1,6 @@
 import httpx
 import pytest
+import socket
 from conftest import files_dict, make_zip
 
 from skill_importer import (
@@ -186,6 +187,28 @@ def test_import_too_large_via_content_length_header_rejected_early(make_importer
 def test_download_rejects_private_ip_literal(importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("http://127.0.0.1/SKILL.md")
+    assert exc.value.code == ERROR_SOURCE_INVALID
+
+
+def test_download_rejects_mixed_public_private_dns_answers(
+    importer, monkeypatch
+) -> None:
+    """混合公网+私网 DNS 应答必须拒绝（rebinding 常见形态）。"""
+
+    def fake_getaddrinfo(host, *args, **kwargs):
+        class Info:
+            def __init__(self, addr):
+                self._addr = addr
+
+        # 模拟同时返回公网与私网地址
+        return [
+            (socket.AF_INET, None, None, "", ("93.184.216.34", 0)),
+            (socket.AF_INET, None, None, "", ("192.168.1.1", 0)),
+        ]
+
+    monkeypatch.setattr("skill_importer.resolver.socket.getaddrinfo", fake_getaddrinfo)
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://rebind.example/SKILL.md")
     assert exc.value.code == ERROR_SOURCE_INVALID
 
 

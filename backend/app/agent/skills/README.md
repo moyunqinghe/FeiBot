@@ -41,9 +41,13 @@ print(pkg.skill_markdown, pkg.slug_hint, pkg.name_hint)
 
 ## 安全行为
 
-- 下载目标 SSRF 守卫：仅 http(s)，目标解析到非公网地址（内网/回环/链路本地等）即拒绝；
-  重定向逐跳校验，最多 10 跳。
-- zip-slip 防御（路径含 `..` 整包拒绝）、解压总字节闸（默认 `max_file_bytes × max_files`）。
+- 下载目标 SSRF 守卫（best-effort）：仅 http(s)，DNS 解析出任一非公网地址
+  （内网/回环/链路本地等）即拒绝；重定向逐跳校验，最多 10 跳。
+  注意：守卫与实际连接是两次独立 DNS 解析，无法完全防御 DNS rebinding
+  （低 TTL 应答在两次解析间切换公网/内网 IP）。若宿主运行环境有更严格的
+  网络边界（VPC egress 策略等），以宿主防护为准。
+- zip-slip 防御（路径含 `..` 整包拒绝）、解压总字节闸（默认 `max_file_bytes × max_files`）、
+  下载前 Content-Length 预检。
 
 ## 错误
 
