@@ -20,7 +20,8 @@ class SkillFile(BaseModel):
 class SkillPackage:
     """Normalized skill package resolved from a remote source.
 
-    source_kind: "platform" | "github" | "url" | "shorthand" | "upload"，默认 "url"。
+    source_kind: "platform" | "github" | "url"（github 含 owner/repo 简写来源），
+    默认 "url"。
     """
 
     files: tuple[SkillFile, ...]
