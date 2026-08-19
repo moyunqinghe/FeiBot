@@ -1,4 +1,5 @@
 import pytest
+from conftest import make_zip
 
 from skill_importer import (
     ERROR_PACKAGE_INVALID,
@@ -9,8 +10,6 @@ from skill_importer import (
     skill_markdown,
 )
 from skill_importer.ziputil import files_from_zip
-
-from conftest import make_zip
 
 
 def test_normalize_single_markdown_becomes_skill_md() -> None:

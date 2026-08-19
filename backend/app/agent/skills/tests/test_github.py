@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from conftest import files_dict, make_zip
 
 from skill_importer import (
     ERROR_GITHUB_API_ERROR,
@@ -7,8 +8,6 @@ from skill_importer import (
     ERROR_SKILL_MD_MISSING,
     SkillImporterError,
 )
-
-from conftest import files_dict, make_zip
 
 
 def test_github_blob_url_downloads_raw(make_importer) -> None:

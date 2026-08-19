@@ -1,10 +1,10 @@
 import httpx
 import pytest
+from conftest import files_dict, make_zip
 
 from skill_importer import (
     ERROR_CONNECT_FAILED,
     ERROR_HTML_NOT_SKILL,
-    ERROR_HTTP_ERROR,
     ERROR_REDIRECT_LOOP,
     ERROR_SOURCE_INVALID,
     ERROR_TIMEOUT,
@@ -12,8 +12,6 @@ from skill_importer import (
     SkillImporter,
     SkillImporterError,
 )
-
-from conftest import files_dict, make_zip
 
 
 def test_import_platform_bare_slug_uses_download_endpoint(make_importer) -> None:
@@ -119,7 +117,7 @@ def test_import_unrecognized_source_rejected(importer) -> None:
 
 
 def test_import_timeout_maps_to_timeout_error() -> None:
-    def handler(request):  # noqa: ANN001
+    def handler(request):
         raise httpx.ConnectTimeout("boom")
 
     importer = SkillImporter(transport=httpx.MockTransport(handler))
@@ -170,7 +168,7 @@ def test_download_rejects_redirect_to_private(make_importer) -> None:
 
 
 def test_download_connect_failed_maps_to_connect_failed() -> None:
-    def handler(request):  # noqa: ANN001
+    def handler(request):
         raise httpx.ConnectError("connection refused")
 
     importer = SkillImporter(transport=httpx.MockTransport(handler))

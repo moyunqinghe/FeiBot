@@ -22,7 +22,12 @@ from skill_importer.errors import (
     SkillImporterError,
 )
 from skill_importer.github import load_github_source
-from skill_importer.metadata import metadata_text, parse_skill_metadata, slugify, source_name
+from skill_importer.metadata import (
+    metadata_text,
+    parse_skill_metadata,
+    slugify,
+    source_name,
+)
 from skill_importer.model import SkillFile, SkillPackage
 from skill_importer.ziputil import (
     _clean_package_path,
@@ -238,13 +243,13 @@ class SkillImporter:
         download_url = f"{self._config.platform_download_endpoint}?slug={quote(slug, safe='')}"
         try:
             return self._load_remote(download_url)
-        except SkillImporterError as download_error:
+        except SkillImporterError:
             if source_url:
                 try:
                     return self._load_remote(source_url)
                 except SkillImporterError:
                     pass
-            raise download_error
+            raise
 
     def _load_remote(
         self, url: str, visited: frozenset[str] = frozenset()
@@ -345,8 +350,7 @@ def _looks_like_markdown_source(path: str, content_type: str) -> bool:
     lower_path = path.lower()
     lower_content_type = content_type.lower()
     return (
-        lower_path.endswith(".md")
-        or lower_path.endswith("/skill")
+        lower_path.endswith((".md", "/skill"))
         or "text/markdown" in lower_content_type
         or "text/plain" in lower_content_type
     )
@@ -356,8 +360,7 @@ def _looks_like_html_response(text: str, content_type: str) -> bool:
     stripped = text.lstrip().lower()
     return (
         "text/html" in content_type
-        or stripped.startswith("<!doctype html")
-        or stripped.startswith("<html")
+        or stripped.startswith(("<!doctype html", "<html"))
     )
 
 
