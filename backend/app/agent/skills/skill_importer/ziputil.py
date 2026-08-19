@@ -39,6 +39,13 @@ def normalize_skill_files(
     files: list[SkillFile],
     markdown: str | None = None,
 ) -> list[SkillFile]:
+    """Normalize skill files: clean paths and strip the common skill-root prefix.
+
+    When files are provided, the directory containing ``SKILL.md`` is treated as
+    the skill root; only that subtree is kept. Sibling directories that merely
+    share a string prefix (e.g. ``a/b-c`` vs root ``a/b``) are silently dropped —
+    behavior inherited from the original host implementation.
+    """
     if not files:
         if not (markdown or "").strip():
             raise SkillImporterError("skill markdown cannot be empty", code=ERROR_PACKAGE_INVALID)
@@ -103,8 +110,17 @@ def files_from_zip(
     *,
     max_file_bytes: int,
     max_files: int,
+    max_total_bytes: int | None = None,
 ) -> list[SkillFile]:
+    """Unpack a skill zip into normalized SkillFile entries.
+
+    Defends against zip-slip (``..`` paths rejected via ``_clean_package_path``),
+    forged header sizes (per-file length re-checked against ``max_file_bytes``),
+    and decompression bombs (total bytes bounded by ``max_total_bytes``, which
+    defaults to ``max_file_bytes * max_files``).
+    """
     normalized_subtree = subtree.strip("/")
+    total_limit = max_total_bytes if max_total_bytes is not None else max_file_bytes * max_files
     with zipfile.ZipFile(BytesIO(data)) as archive:
         names = [
             name
@@ -126,6 +142,7 @@ def files_from_zip(
             )
         base = skill_candidates[0].rsplit("/", 1)[0] if "/" in skill_candidates[0] else ""
         files: list[SkillFile] = []
+        total_bytes = 0
         for name in names:
             if base:
                 if not name.startswith(f"{base}/"):
@@ -140,12 +157,19 @@ def files_from_zip(
                 continue
             if len(files) >= max_files:
                 break
-            content = _decode_text(archive.read(name))
+            relative = _clean_package_path(relative)  # zip-slip defense; raises PACKAGE_INVALID
+            raw = archive.read(name)
+            if len(raw) > max_file_bytes:
+                continue
+            total_bytes += len(raw)
+            if total_bytes > total_limit:
+                break
+            content = _decode_text(raw)
             files.append(
                 SkillFile(
                     path=relative,
                     content=content,
-                    size=info.file_size,
+                    size=len(raw),
                     mime_type=_guess_mime_type(relative),
                 )
             )

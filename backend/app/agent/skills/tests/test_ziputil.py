@@ -93,3 +93,19 @@ def test_files_from_zip_skips_bad_dirs_and_respects_limits() -> None:
     )
     files = files_from_zip(data, max_file_bytes=1024, max_files=10)
     assert [file.path for file in files] == ["SKILL.md", "extra.py"]
+
+
+def test_files_from_zip_rejects_zip_slip() -> None:
+    data = make_zip({"SKILL.md": "# ok\n", "../escape.md": "x"})
+    with pytest.raises(SkillImporterError) as exc:
+        files_from_zip(data, max_file_bytes=1024, max_files=100)
+    assert exc.value.code == ERROR_PACKAGE_INVALID
+
+
+def test_normalize_drops_sibling_of_skill_root() -> None:
+    files = [
+        SkillFile(path="a/b/SKILL.md", content="# ok\n"),
+        SkillFile(path="a/b-c/secret.md", content="x"),
+    ]
+    normalized = normalize_skill_files(files)
+    assert [file.path for file in normalized] == ["SKILL.md"]
