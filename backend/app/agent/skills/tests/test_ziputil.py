@@ -1,3 +1,4 @@
+import httpx
 import pytest
 from conftest import make_zip
 
@@ -98,6 +99,31 @@ def test_files_from_zip_rejects_zip_slip() -> None:
     data = make_zip({"SKILL.md": "# ok\n", "../escape.md": "x"})
     with pytest.raises(SkillImporterError) as exc:
         files_from_zip(data, max_file_bytes=1024, max_files=100)
+    assert exc.value.code == ERROR_PACKAGE_INVALID
+
+
+def test_files_from_zip_non_zip_bytes_maps_to_package_invalid() -> None:
+    """非 zip 字节必须映射为 SkillImporterError，不得泄漏裸 BadZipFile。"""
+    with pytest.raises(SkillImporterError) as exc:
+        files_from_zip(b"\x1f\x8b\x08\x00not a zip", max_file_bytes=1024, max_files=100)
+    assert exc.value.code == ERROR_PACKAGE_INVALID
+
+
+def test_import_zip_content_type_non_zip_bytes_maps_to_package_invalid(
+    make_importer,
+) -> None:
+    """content-type 含 zip 但 body 非 zip 时，协议层仍应抛 SkillImporterError。"""
+    importer = make_importer(
+        {
+            "https://example.com/skill.bin": httpx.Response(
+                200,
+                content=b"\x1f\x8b\x08\x00not a zip",
+                headers={"content-type": "application/x-zip-compressed-extra"},
+            )
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://example.com/skill.bin")
     assert exc.value.code == ERROR_PACKAGE_INVALID
 
 

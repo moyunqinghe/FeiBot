@@ -121,7 +121,13 @@ def files_from_zip(
     """
     normalized_subtree = subtree.strip("/")
     total_limit = max_total_bytes if max_total_bytes is not None else max_file_bytes * max_files
-    with zipfile.ZipFile(BytesIO(data)) as archive:
+    try:
+        archive_cm = zipfile.ZipFile(BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise SkillImporterError(
+            "source is not a valid zip package", code=ERROR_PACKAGE_INVALID, cause=exc
+        ) from exc
+    with archive_cm as archive:
         names = [
             name
             for name in archive.namelist()
