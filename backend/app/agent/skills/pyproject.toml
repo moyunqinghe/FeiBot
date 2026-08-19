@@ -19,3 +19,7 @@ test = ["pytest"]
 
 [tool.setuptools.packages.find]
 include = ["skill_importer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]

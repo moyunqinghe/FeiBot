@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from conftest import make_zip
+from _helpers import make_zip
 
 from skill_importer import (
     ERROR_PACKAGE_INVALID,

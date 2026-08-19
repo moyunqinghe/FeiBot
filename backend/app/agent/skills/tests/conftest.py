@@ -1,20 +1,9 @@
 from __future__ import annotations
 
-from io import BytesIO
-from zipfile import ZipFile
-
 import httpx
 import pytest
 
 from skill_importer import SkillImporter
-
-
-def make_zip(files: dict[str, str]) -> bytes:
-    buf = BytesIO()
-    with ZipFile(buf, "w") as archive:
-        for path, content in files.items():
-            archive.writestr(path, content)
-    return buf.getvalue()
 
 
 def make_transport(routes: dict[str, object]) -> httpx.MockTransport:
@@ -46,7 +35,3 @@ def make_importer():
 @pytest.fixture
 def importer(make_importer):
     return make_importer({})
-
-
-def files_dict(pkg) -> dict[str, str]:
-    return {file.path: file.content for file in pkg.files}

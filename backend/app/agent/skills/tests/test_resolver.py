@@ -1,7 +1,7 @@
 import httpx
 import pytest
 import socket
-from conftest import files_dict, make_zip
+from _helpers import files_dict, make_zip
 
 from skill_importer import (
     ERROR_CONNECT_FAILED,

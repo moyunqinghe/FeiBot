@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from conftest import files_dict, make_zip
+from _helpers import files_dict, make_zip
 
 from skill_importer import (
     ERROR_GITHUB_API_ERROR,
