@@ -164,6 +164,25 @@ def test_import_too_large_maps_too_large_error(make_importer) -> None:
     assert exc.value.code == ERROR_TOO_LARGE
 
 
+def test_import_too_large_via_content_length_header_rejected_early(make_importer) -> None:
+    """Content-Length 预检：声明超限即拒绝，body 不会被读取。"""
+    seen = {"body_read": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["body_read"] = True
+        return httpx.Response(
+            200,
+            headers={"content-length": str(96 * 1024 * 1024 + 1)},
+            content=b"x",
+        )
+
+    importer = SkillImporter(transport=httpx.MockTransport(handler))
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://example.com/SKILL.md")
+    assert exc.value.code == ERROR_TOO_LARGE
+    assert seen["body_read"]  # handler 已被调用，但响应体远小于声明，仍按声明拒绝
+
+
 def test_download_rejects_private_ip_literal(importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("http://127.0.0.1/SKILL.md")

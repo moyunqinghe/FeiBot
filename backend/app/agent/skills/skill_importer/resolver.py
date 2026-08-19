@@ -93,6 +93,10 @@ class _Http:
                 raise SkillImporterError(
                     f"download failed with HTTP {response.status_code}", code=ERROR_HTTP_ERROR
                 )
+            content_length = response.headers.get("content-length")
+            if content_length and content_length.isdigit():
+                if int(content_length) > self._config.max_package_bytes:
+                    raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)
             data = response.content
             if len(data) > self._config.max_package_bytes:
                 raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)
