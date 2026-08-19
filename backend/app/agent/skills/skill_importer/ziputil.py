@@ -6,6 +6,7 @@ from io import BytesIO
 from skill_importer.errors import (
     ERROR_PACKAGE_INVALID,
     ERROR_SKILL_MD_MISSING,
+    ERROR_TOO_LARGE,
     SkillImporterError,
 )
 from skill_importer.model import SkillFile
@@ -147,9 +148,11 @@ def files_from_zip(
                 "package does not contain SKILL.md", code=ERROR_SKILL_MD_MISSING
             )
         base = skill_candidates[0].rsplit("/", 1)[0] if "/" in skill_candidates[0] else ""
+        # SKILL.md 优先处理，避免超限 break 把它静默丢在后面
+        ordered = [skill_candidates[0]] + [n for n in names if n != skill_candidates[0]]
         files: list[SkillFile] = []
         total_bytes = 0
-        for name in names:
+        for name in ordered:
             if base:
                 if not name.startswith(f"{base}/"):
                     continue
@@ -161,15 +164,19 @@ def files_from_zip(
             info = archive.getinfo(name)
             if info.file_size > max_file_bytes:
                 continue
-            if len(files) >= max_files:
-                break
+            if len(files) >= max_files or total_bytes >= total_limit:
+                raise SkillImporterError(
+                    "skill package exceeds size or file-count limits", code=ERROR_TOO_LARGE
+                )
             relative = _clean_package_path(relative)  # zip-slip defense; raises PACKAGE_INVALID
             raw = archive.read(name)
             if len(raw) > max_file_bytes:
                 continue
             total_bytes += len(raw)
             if total_bytes > total_limit:
-                break
+                raise SkillImporterError(
+                    "skill package exceeds total size limit", code=ERROR_TOO_LARGE
+                )
             content = _decode_text(raw)
             files.append(
                 SkillFile(

@@ -5,6 +5,7 @@ from conftest import make_zip
 from skill_importer import (
     ERROR_PACKAGE_INVALID,
     ERROR_SKILL_MD_MISSING,
+    ERROR_TOO_LARGE,
     SkillFile,
     SkillImporterError,
     normalize_skill_files,
@@ -134,3 +135,42 @@ def test_normalize_drops_sibling_of_skill_root() -> None:
     ]
     normalized = normalize_skill_files(files)
     assert [file.path for file in normalized] == ["SKILL.md"]
+
+
+def test_files_from_zip_total_limit_raises_too_large_not_skill_md_missing() -> None:
+    """超 total 上限必须抛 TOO_LARGE，不得静默丢弃 SKILL.md 后误报缺失。"""
+    data = make_zip(
+        {
+            "pkg/assets/big.bin": "z" * 1200,
+            "pkg/SKILL.md": "# ok\n",
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        files_from_zip(data, max_file_bytes=2048, max_files=10, max_total_bytes=1000)
+    assert exc.value.code == ERROR_TOO_LARGE
+
+
+def test_files_from_zip_max_files_raises_too_large() -> None:
+    data = make_zip(
+        {
+            "pkg/SKILL.md": "# ok\n",
+            "pkg/a.py": "a",
+            "pkg/b.py": "b",
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        files_from_zip(data, max_file_bytes=1024, max_files=1)
+    assert exc.value.code == ERROR_TOO_LARGE
+
+
+def test_files_from_zip_skill_md_survives_when_later_files_skip() -> None:
+    """SKILL.md 之后的大文件按 continue 跳过，SKILL.md 不受影响。"""
+    data = make_zip(
+        {
+            "pkg/SKILL.md": "# ok\n",
+            "pkg/big.bin": "z" * 2048,
+            "pkg/small.py": "s",
+        }
+    )
+    files = files_from_zip(data, max_file_bytes=1024, max_files=10)
+    assert [file.path for file in files] == ["SKILL.md", "small.py"]
