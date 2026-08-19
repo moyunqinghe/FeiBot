@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from skill_importer.errors import (
     ERROR_CONNECT_FAILED,
+    ERROR_HTTP_ERROR,
     ERROR_SKILL_MD_MISSING,
     ERROR_SOURCE_INVALID,
     SkillImporterError,
@@ -195,6 +196,14 @@ def _download_github_archive(
         except SkillImporterError as exc:
             errors.append(exc)
     detail = "; ".join(str(exc) for exc in errors)
+    codes = [exc.code for exc in errors]
+    aggregate_code = (
+        ERROR_HTTP_ERROR
+        if ERROR_HTTP_ERROR in codes
+        else ERROR_CONNECT_FAILED
+        if ERROR_CONNECT_FAILED in codes
+        else (codes[0] if codes else ERROR_CONNECT_FAILED)
+    )
     raise SkillImporterError(
-        f"unable to download GitHub skill package: {detail}", code=ERROR_CONNECT_FAILED
+        f"unable to download GitHub skill package: {detail}", code=aggregate_code
     )

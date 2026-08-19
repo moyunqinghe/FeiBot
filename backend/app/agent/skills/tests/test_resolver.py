@@ -3,6 +3,7 @@ import pytest
 
 from skill_importer import (
     ERROR_HTML_NOT_SKILL,
+    ERROR_HTTP_ERROR,
     ERROR_REDIRECT_LOOP,
     ERROR_SOURCE_INVALID,
     ERROR_TIMEOUT,
@@ -131,3 +132,37 @@ def test_import_too_large_maps_too_large_error(make_importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("https://example.com/SKILL.md")
     assert exc.value.code == ERROR_TOO_LARGE
+
+
+def test_download_rejects_private_ip_literal(importer) -> None:
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("http://127.0.0.1/SKILL.md")
+    assert exc.value.code == ERROR_SOURCE_INVALID
+
+
+def test_download_follows_redirect_with_guard(make_importer) -> None:
+    importer = make_importer(
+        {
+            "https://a.example/x": httpx.Response(
+                302, headers={"location": "https://b.example/SKILL.md"}
+            ),
+            "https://b.example/SKILL.md": httpx.Response(
+                200, content=b"# hi\n", headers={"content-type": "text/plain"}
+            ),
+        }
+    )
+    pkg = importer.import_skill("https://a.example/x")
+    assert pkg.skill_markdown == "# hi\n"
+
+
+def test_download_rejects_redirect_to_private(make_importer) -> None:
+    importer = make_importer(
+        {
+            "https://a.example/x": httpx.Response(
+                302, headers={"location": "http://169.254.169.254/latest/meta-data"}
+            )
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://a.example/x")
+    assert exc.value.code == ERROR_SOURCE_INVALID

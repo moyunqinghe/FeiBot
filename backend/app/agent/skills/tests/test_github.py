@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from skill_importer import ERROR_SKILL_MD_MISSING, SkillImporterError
+from skill_importer import ERROR_HTTP_ERROR, ERROR_SKILL_MD_MISSING, SkillImporterError
 
 from conftest import files_dict, make_zip
 
@@ -83,3 +83,14 @@ def test_github_directory_without_skill_md_raises(make_importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("owner/repo")
     assert exc.value.code == ERROR_SKILL_MD_MISSING
+
+
+def test_github_blob_404_maps_http_error(make_importer) -> None:
+    importer = make_importer(
+        {
+            "https://raw.githubusercontent.com/owner/repo/main/skills/x/SKILL.md": httpx.Response(404)
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://github.com/owner/repo/blob/main/skills/x/SKILL.md")
+    assert exc.value.code == ERROR_HTTP_ERROR

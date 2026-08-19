@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
+import socket
 from dataclasses import dataclass
 from html import unescape
 from urllib.parse import quote, unquote, urljoin, urlparse
@@ -58,23 +60,39 @@ class _Http:
         self._client = client
         self._config = config
 
+    MAX_REDIRECTS = 10
+
     def download(self, url: str) -> tuple[bytes, str]:
-        try:
-            response = self._client.get(url, headers={"User-Agent": self._config.user_agent})
-        except httpx.TimeoutException as exc:
-            raise SkillImporterError("download timed out", code=ERROR_TIMEOUT, cause=exc) from exc
-        except httpx.TransportError as exc:
-            raise SkillImporterError(
-                f"download failed: {exc}", code=ERROR_CONNECT_FAILED, cause=exc
-            ) from exc
-        if response.status_code >= 400:
-            raise SkillImporterError(
-                f"download failed with HTTP {response.status_code}", code=ERROR_HTTP_ERROR
-            )
-        data = response.content
-        if len(data) > self._config.max_package_bytes:
-            raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)
-        return data, response.headers.get("content-type", "")
+        current = url
+        for _ in range(self.MAX_REDIRECTS + 1):
+            _assert_public_target(current)
+            try:
+                response = self._client.get(
+                    current,
+                    headers={"User-Agent": self._config.user_agent},
+                    follow_redirects=False,
+                )
+            except httpx.TimeoutException as exc:
+                raise SkillImporterError("download timed out", code=ERROR_TIMEOUT, cause=exc) from exc
+            except httpx.TransportError as exc:
+                raise SkillImporterError(
+                    f"download failed: {exc}", code=ERROR_CONNECT_FAILED, cause=exc
+                ) from exc
+            if response.is_redirect:
+                location = response.headers.get("location")
+                if not location:
+                    raise SkillImporterError("redirect without location", code=ERROR_HTTP_ERROR)
+                current = urljoin(current, location)
+                continue
+            if response.status_code >= 400:
+                raise SkillImporterError(
+                    f"download failed with HTTP {response.status_code}", code=ERROR_HTTP_ERROR
+                )
+            data = response.content
+            if len(data) > self._config.max_package_bytes:
+                raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)
+            return data, response.headers.get("content-type", "")
+        raise SkillImporterError("too many redirects", code=ERROR_REDIRECT_LOOP)
 
     def download_json(self, url: str) -> object:
         data, _ = self.download(url)
@@ -291,6 +309,25 @@ def _required_text(value: str | None) -> str:
     if not cleaned:
         raise SkillImporterError("source cannot be empty", code=ERROR_SOURCE_INVALID)
     return cleaned
+
+
+def _assert_public_target(url: str) -> None:
+    """Reject non-http(s) schemes and targets that resolve only to non-public addresses."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise SkillImporterError("only http(s) sources are allowed", code=ERROR_SOURCE_INVALID)
+    host = parsed.hostname
+    if not host:
+        raise SkillImporterError("invalid source host", code=ERROR_SOURCE_INVALID)
+    try:
+        resolved = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return  # 解析失败由后续 CONNECT_FAILED 兜底，不额外拦截
+    ips = [ipaddress.ip_address(info[4][0]) for info in resolved]
+    if ips and all(not ip.is_global for ip in ips):
+        raise SkillImporterError(
+            f"source resolves to a non-public address: {host}", code=ERROR_SOURCE_INVALID
+        )
 
 
 def _valid_clawhub_slug(value: str) -> str | None:
