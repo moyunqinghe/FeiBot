@@ -12,6 +12,7 @@ from skill_importer.errors import (
     SkillImporterError,
 )
 from skill_importer.model import SkillFile, SkillPackage
+from skill_importer.metadata import metadata_text, parse_skill_metadata, slugify, source_name
 
 __all__ = [
     "ERROR_CONNECT_FAILED",
@@ -27,4 +28,8 @@ __all__ = [
     "SkillFile",
     "SkillImporterError",
     "SkillPackage",
+    "metadata_text",
+    "parse_skill_metadata",
+    "slugify",
+    "source_name",
 ]
