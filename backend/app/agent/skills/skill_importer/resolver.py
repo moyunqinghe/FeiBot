@@ -139,7 +139,7 @@ class SkillImporter:
             max_indirections=max_indirections,
         )
         self._client = httpx.Client(
-            timeout=timeout_seconds, follow_redirects=True, transport=transport
+            timeout=timeout_seconds, follow_redirects=False, transport=transport
         )
         self._http = _Http(self._client, self._config)
 

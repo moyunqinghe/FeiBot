@@ -1,7 +1,12 @@
 import httpx
 import pytest
 
-from skill_importer import ERROR_HTTP_ERROR, ERROR_SKILL_MD_MISSING, SkillImporterError
+from skill_importer import (
+    ERROR_GITHUB_API_ERROR,
+    ERROR_HTTP_ERROR,
+    ERROR_SKILL_MD_MISSING,
+    SkillImporterError,
+)
 
 from conftest import files_dict, make_zip
 
@@ -94,3 +99,14 @@ def test_github_blob_404_maps_http_error(make_importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("https://github.com/owner/repo/blob/main/skills/x/SKILL.md")
     assert exc.value.code == ERROR_HTTP_ERROR
+
+
+def test_github_api_invalid_json_maps_to_api_error(make_importer) -> None:
+    importer = make_importer(
+        {
+            "https://api.github.com/repos/owner/repo/contents/skills/weather?ref=main": b"not json at all"
+        }
+    )
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://github.com/owner/repo/tree/main/skills/weather")
+    assert exc.value.code == ERROR_GITHUB_API_ERROR

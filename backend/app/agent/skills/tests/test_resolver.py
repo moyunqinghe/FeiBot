@@ -2,6 +2,7 @@ import httpx
 import pytest
 
 from skill_importer import (
+    ERROR_CONNECT_FAILED,
     ERROR_HTML_NOT_SKILL,
     ERROR_HTTP_ERROR,
     ERROR_REDIRECT_LOOP,
@@ -166,3 +167,13 @@ def test_download_rejects_redirect_to_private(make_importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("https://a.example/x")
     assert exc.value.code == ERROR_SOURCE_INVALID
+
+
+def test_download_connect_failed_maps_to_connect_failed() -> None:
+    def handler(request):  # noqa: ANN001
+        raise httpx.ConnectError("connection refused")
+
+    importer = SkillImporter(transport=httpx.MockTransport(handler))
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://example.com/SKILL.md")
+    assert exc.value.code == ERROR_CONNECT_FAILED
