@@ -47,7 +47,7 @@ def normalize_skill_files(
             SkillFile(
                 path="SKILL.md",
                 content=markdown,
-                size=len(encoded) + 1,
+                size=len(encoded),
                 mime_type="text/markdown",
             )
         ]

@@ -15,7 +15,7 @@ from conftest import make_zip
 
 def test_normalize_single_markdown_becomes_skill_md() -> None:
     files = normalize_skill_files([], markdown="# hello")
-    assert files == [SkillFile(path="SKILL.md", content="# hello", size=8, mime_type="text/markdown")]
+    assert files == [SkillFile(path="SKILL.md", content="# hello", size=7, mime_type="text/markdown")]
 
 
 def test_normalize_requires_content_when_no_files() -> None:
