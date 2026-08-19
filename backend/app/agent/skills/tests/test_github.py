@@ -109,3 +109,60 @@ def test_github_api_invalid_json_maps_to_api_error(make_importer) -> None:
     with pytest.raises(SkillImporterError) as exc:
         importer.import_skill("https://github.com/owner/repo/tree/main/skills/weather")
     assert exc.value.code == ERROR_GITHUB_API_ERROR
+
+
+def test_github_blob_slash_branch_tries_longest_first(make_importer) -> None:
+    """分支名含 "/"（feature/x）时，通过分支 API 解析真实分支。"""
+    importer = make_importer(
+        {
+            "https://api.github.com/repos/owner/repo/branches?per_page=100": [
+                {"name": "main"},
+                {"name": "feature/x"},
+            ],
+            "https://raw.githubusercontent.com/owner/repo/feature/x/SKILL.md": "# slash\n",
+        }
+    )
+    pkg = importer.import_skill("https://github.com/owner/repo/blob/feature/x/SKILL.md")
+    assert pkg.skill_markdown == "# slash\n"
+
+
+def test_github_blob_slash_branch_api_unavailable_falls_back(make_importer) -> None:
+    """分支 API 不可用时退回单段猜测（旧行为）。"""
+    importer = make_importer(
+        {
+            "https://raw.githubusercontent.com/owner/repo/feature/SKILL.md": "# legacy\n"
+        }
+    )
+    pkg = importer.import_skill("https://github.com/owner/repo/blob/feature/SKILL.md")
+    assert pkg.skill_markdown == "# legacy\n"
+
+
+def test_github_tree_slash_branch_resolved(make_importer) -> None:
+    importer = make_importer(
+        {
+            "https://api.github.com/repos/owner/repo/branches?per_page=100": [
+                {"name": "main"},
+                {"name": "feature/x"},
+            ],
+            "https://api.github.com/repos/owner/repo/contents/skills/weather?ref=feature%2Fx": [
+                {
+                    "type": "file",
+                    "path": "skills/weather/SKILL.md",
+                    "size": 10,
+                    "download_url": "https://raw.githubusercontent.com/owner/repo/feature/x/skills/weather/SKILL.md",
+                }
+            ],
+            "https://raw.githubusercontent.com/owner/repo/feature/x/skills/weather/SKILL.md": "# tree\n",
+        }
+    )
+    pkg = importer.import_skill(
+        "https://github.com/owner/repo/tree/feature/x/skills/weather"
+    )
+    assert pkg.skill_markdown == "# tree\n"
+
+
+def test_github_blob_all_branch_candidates_404_raises_http_error(make_importer) -> None:
+    importer = make_importer({})
+    with pytest.raises(SkillImporterError) as exc:
+        importer.import_skill("https://github.com/owner/repo/blob/feature/x/SKILL.md")
+    assert exc.value.code == ERROR_HTTP_ERROR

@@ -58,23 +58,22 @@ def load_github_source(parsed, *, http: _Http, config: _Config) -> list[SkillFil
             max_file_bytes=config.max_file_bytes,
             max_files=config.max_files,
         )
-    if len(parts) >= 5 and parts[2] in {"blob", "raw"}:
-        branch = parts[3]
-        file_path = "/".join(parts[4:])
-        raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{file_path}"
+    # blob/raw/tree 后的分支名可能含 "/"（如 feature/x）；URL 本身有歧义，
+    # 先查仓库分支列表，命中即按真实分支解析，API 不可用时退回单段猜测。
+    if len(parts) >= 5 and parts[2] in {"blob", "raw", "tree"}:
+        branch, remainder = _resolve_github_branch(http, parts)
+        if parts[2] == "tree":
+            return _download_github_directory(http, config, owner, repo, branch, remainder)
+        raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{remainder}"
         data, content_type = http.download(raw_url)
         return [
             SkillFile(
-                path=file_path.rsplit("/", 1)[-1] or "SKILL.md",
+                path=remainder.rsplit("/", 1)[-1] or "SKILL.md",
                 content=_decode_text(data),
                 size=len(data),
                 mime_type=content_type or "text/markdown",
             )
         ]
-    if len(parts) >= 5 and parts[2] == "tree":
-        branch = parts[3]
-        subtree = "/".join(parts[4:])
-        return _download_github_directory(http, config, owner, repo, branch, subtree)
     subtree = "/".join(parts[2:]) if len(parts) > 2 else ""
     errors: list[SkillImporterError] = []
     for branch in ["main", "master"]:
@@ -85,6 +84,45 @@ def load_github_source(parsed, *, http: _Http, config: _Config) -> list[SkillFil
                 raise
             errors.append(exc)
     return _download_github_archive(http, config, owner, repo, ["main", "master"], subtree)
+
+
+def _resolve_github_branch(http: _Http, parts: list[str]) -> tuple[str, str]:
+    """Resolve branch/path ambiguity after blob/raw/tree.
+
+    GitHub branches may contain "/" (e.g. feature/x). Query the repo's branch
+    list once and pick the longest matching branch prefix; when the API is
+    unavailable, fall back to the legacy single-segment guess parts[3].
+    """
+    segments = parts[3:]
+    branches = _list_github_branches(http, parts[0], parts[1].removesuffix(".git"))
+    if branches:
+        for split_at in range(len(segments), 1, -1):
+            candidate = "/".join(segments[:split_at])
+            remainder = "/".join(segments[split_at:])
+            if remainder and candidate in branches:
+                return candidate, remainder
+        if segments[0] in branches:
+            return segments[0], "/".join(segments[1:])
+        # 无匹配分支：仍按旧猜测继续，让后续请求给出真实错误码
+    return segments[0], "/".join(segments[1:])
+
+
+def _list_github_branches(http: _Http, owner: str, repo: str) -> frozenset[str]:
+    api_url = (
+        f"https://api.github.com/repos/{quote(owner)}/{quote(repo)}"
+        "/branches?per_page=100"
+    )
+    try:
+        payload = http.download_json(api_url)
+    except SkillImporterError:
+        return frozenset()
+    entries = payload if isinstance(payload, list) else [payload]
+    names = [
+        str(entry.get("name") or "")
+        for entry in entries
+        if isinstance(entry, dict)
+    ]
+    return frozenset(name for name in names if name)
 
 
 def _download_github_directory(
