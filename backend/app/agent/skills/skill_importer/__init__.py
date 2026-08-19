@@ -13,6 +13,7 @@ from skill_importer.errors import (
 )
 from skill_importer.model import SkillFile, SkillPackage
 from skill_importer.metadata import metadata_text, parse_skill_metadata, slugify, source_name
+from skill_importer.resolver import SkillImporter
 from skill_importer.ziputil import (
     clean_package_path,
     files_from_zip,
@@ -32,6 +33,7 @@ __all__ = [
     "ERROR_TIMEOUT",
     "ERROR_TOO_LARGE",
     "SkillFile",
+    "SkillImporter",
     "SkillImporterError",
     "SkillPackage",
     "metadata_text",
