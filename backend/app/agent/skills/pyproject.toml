@@ -8,6 +8,7 @@ version = "1.0.0"
 description = "Pure protocol layer for importing skill packages from remote sources (open platforms, GitHub repo/tree/blob/raw/archive, raw SKILL.md, zip URLs, owner/repo shorthand)."
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
 dependencies = [
     "httpx",
     "pydantic",
