@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 from skill_importer import SkillFile, SkillImporterError, SkillPackage
 
@@ -147,3 +149,62 @@ def test_reinstall_same_slug_replaces_stale_files(tmp_path) -> None:
     assert slug == "daily-ai-news"
     assert not (skills_dir / "daily-ai-news" / "scripts" / "old.py").exists()
     assert "# v2" in (skills_dir / "daily-ai-news" / "SKILL.md").read_text(encoding="utf-8")
+
+
+def test_uninstall_removes_files_and_record(tmp_path) -> None:
+    skills_dir = tmp_path / "skills"
+    store_ = FakeStore()
+    manager = SkillManager(store_, skills_dir, importer=FakeImporter(_make_package()))
+    manager.install("owner/repo")
+
+    assert manager.uninstall("daily-ai-news") is True
+    assert not (skills_dir / "daily-ai-news").exists()
+    assert store_.get("daily-ai-news") is None
+
+
+def test_uninstall_missing_slug_returns_false(tmp_path) -> None:
+    manager = SkillManager(FakeStore(), tmp_path, importer=FakeImporter())
+    assert manager.uninstall("nope") is False
+
+
+def test_uninstall_rejects_invalid_slug(tmp_path) -> None:
+    manager = SkillManager(FakeStore(), tmp_path, importer=FakeImporter())
+    with pytest.raises(SkillManagerError):
+        manager.uninstall("../escape")
+
+
+def test_enable_disable_toggle_flag_only(tmp_path) -> None:
+    skills_dir = tmp_path / "skills"
+    store_ = FakeStore()
+    manager = SkillManager(store_, skills_dir, importer=FakeImporter(_make_package()))
+    manager.install("owner/repo")
+
+    assert manager.disable("daily-ai-news") is True
+    assert store_.get("daily-ai-news")["enabled"] == 0
+    assert (skills_dir / "daily-ai-news" / "SKILL.md").is_file()  # 文件保留
+    assert manager.enable("daily-ai-news") is True
+    assert store_.get("daily-ai-news")["enabled"] == 1
+
+
+def test_enable_disable_missing_slug_returns_false(tmp_path) -> None:
+    manager = SkillManager(FakeStore(), tmp_path, importer=FakeImporter())
+    assert manager.disable("nope") is False
+    assert manager.enable("nope") is False
+
+
+def test_list_reports_rows_with_filesystem_state(tmp_path) -> None:
+    skills_dir = tmp_path / "skills"
+    store_ = FakeStore()
+    manager = SkillManager(store_, skills_dir, importer=FakeImporter(_make_package()))
+    manager.install("owner/repo")
+
+    (row,) = manager.list()
+    assert row["slug"] == "daily-ai-news"
+    assert row["enabled"] == 1
+    assert row["files_ok"] is True
+    assert row["file_count"] == 1
+
+    shutil.rmtree(skills_dir / "daily-ai-news")
+    (row,) = manager.list()
+    assert row["files_ok"] is False
+    assert row["file_count"] == 0
