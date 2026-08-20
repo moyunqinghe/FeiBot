@@ -13,7 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
 DATA_DIR = BASE_DIR / ".feibot"  # 运行时数据目录(sqlite 库等),不进 git
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-SKILLS_DIR = BASE_DIR / "skills"  # 项目根级 skill 内容目录
+SKILLS_DIR = DATA_DIR / "skills"  # 已安装 skill 运行时目录,不进 git
 
 # 渠道 token 落地加密的密钥
 CHANNEL_SECRET = os.environ.get("FEIBOT_CHANNEL_SECRET", "feibot-dev-secret")
