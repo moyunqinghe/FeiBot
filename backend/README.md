@@ -8,12 +8,12 @@
 - `app/config.py` — 路径、密钥(env `FEIBOT_CHANNEL_SECRET`)、渠道常量
 - `app/api/` — HTTP API 层(占位,后续引入 FastAPI)
 - `app/channels/` — 渠道协议层:微信扫码登录 + 长轮询收发(`ingress.py`),协议封装在 `channels/wechat/`(wechat-ilink 包)
-- `app/agent/` — agent 编排层:引擎、slash 指令、上下文、记忆、会话、提示词、skills、tools(内置工具 + 白名单门控)、MCP(占位)
+- `app/agent/` — agent 编排层:引擎、slash 指令、上下文、记忆、会话、提示词、skills(导入基座 + 装/卸管理)、tools(内置工具 + 白名单门控)、MCP(占位)
 - `app/llm/` — LLM 层:`client.py` 对上层只暴露 `generate(messages)`(经 `llm_protocols/` 通用协议包真实调用,无配置回退 EchoLLM);`registry.py` 管模型配置存取/加解密;`manage.py` 是配置 CLI;`llm_protocols/` 为独立协议包(勿改)
 - `app/db/` — sqlite 持久化:kv 表(渠道 token/游标、当前模型)+ sessions 表 + model_configs 表 + messages 表(会话历史)
 - `app/jobs/` — 后台任务层(占位:outbox 投递、定时任务)
 - `USER.md` — 用户画像,由助理根据对话自动维护(见下)
-- `.feibot/` — 运行时数据目录，不进 git；sqlite 数据库位于 `.feibot/feibot.db`，已安装 Skill 位于 `.feibot/skills/<skill-id>/`
+- `.feibot/` — 运行时数据目录，不进 git；sqlite 数据库位于 `.feibot/feibot.db`，已安装 Skill 位于 `.feibot/skills/<slug>/`
 - `tests/` — 回归测试
 
 依赖方向:`channels` → `agent` → `llm` / `db`;agent 层零渠道依赖,engine 返回文本、ingress 负责分片发送。
@@ -54,6 +54,12 @@ plugin_manager.list(); plugin_manager.disable("12306-mcp"); plugin_manager.unins
 ```
 
 管理员可在微信里用 `/mcp` 系列指令管理 MCP 插件:`/mcp` 或 `/mcp list` 查看已装插件,`/mcp add <名称> <url>` 装入(仅支持 url/streamable_http 类),`/mcp remove <名称>` 卸下,`/mcp enable|disable <名称>` 启停。非管理员不可用。
+
+## Skill 管理（装/卸技能包）
+
+已安装技能位于运行时目录 `.feibot/skills/<slug>/`（不进 git），元数据持久化在 sqlite `installed_skills` 表；`slug` 即 SKILL.md frontmatter 的 `name`（要求小写字母/数字/连字符，不合规的包会被拒绝）。导入协议走基座 `skill_importer`（勿改），生命周期管理在 `agent/skills/manager.py`（基座层，依赖注入，零 app.* 耦合）。
+
+管理员可在微信里用 `/skill` 系列指令管理技能：`/skill` 或 `/skill list` 查看已装技能，`/skill add <来源>` 装入（来源支持 GitHub URL/tree、raw SKILL.md、zip、平台 slug），`/skill remove <slug>` 卸下，`/skill enable|disable <slug>` 启停。非管理员不可用。
 
 ## 模型配置
 
