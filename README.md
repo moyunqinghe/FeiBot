@@ -22,12 +22,15 @@ agent 层零渠道依赖；engine 只产出文本，渠道 ingress 负责分片�
 
 ## 可复用的纯协议层基座
 
-两个自包含、可 `pip install` 的协议包，零业务/数据库/Web 框架耦合：
+三个自包含、可 `pip install` 的协议包，零业务/数据库/Web 框架耦合：
 
 - `backend/app/llm/llm_protocols/`（`llm-protocols`）— LLM 提供商协议层
   （OpenAI `chat.completions`/`responses`、Anthropic `messages`、Gemini `generateContent`）。
 - `backend/app/agent/mcp/`（`mcp-discovery`）— MCP server 工具发现协议层
   （stdio / Streamable HTTP / legacy HTTP+SSE），见其 [`README`](backend/app/agent/mcp/README.md)。
+- `backend/app/agent/skills/`（[`skill-importer`](https://github.com/moyunqinghe/skill-importer)）— 技能包远程导入协议层
+  （开源平台 slug/URL、GitHub repo/tree/blob/raw/archive、raw SKILL.md、zip URL、owner/repo 简写），
+  见其 [`README`](backend/app/agent/skills/README.md)。
 
 ## 快速开始
 
