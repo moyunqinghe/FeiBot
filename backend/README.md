@@ -61,6 +61,8 @@ plugin_manager.list(); plugin_manager.disable("12306-mcp"); plugin_manager.unins
 
 管理员可在微信里用 `/skill` 系列指令管理技能：`/skill` 或 `/skill list` 查看已装技能，`/skill add <来源>` 装入（来源支持 GitHub URL/tree、raw SKILL.md、zip、平台 slug），`/skill remove <slug>` 卸下，`/skill enable|disable <slug>` 启停。非管理员不可用。
 
+管理员也可以直接说自然语言：「安装这个skill：<链接>」「把 <slug> 卸载了」「装了哪些技能」——模型会调用内置工具 `install_skill` / `uninstall_skill` / `list_skills` 完成（工具说明含纪律约束，禁止模型用 shell 自行下载技能内容）。未配置模型时请改用 `/skill` 指令。
+
 ## 模型配置
 
 模型配置存 sqlite `model_configs` 表,api_key 加密落盘(密钥与渠道 token 同源于 env `FEIBOT_CHANNEL_SECRET`)。协议取值见 `llm_protocols.ModelApiProtocol`:`openai_chat_completions` / `openai_responses` / `anthropic_messages` / `gemini_generate_content`。
