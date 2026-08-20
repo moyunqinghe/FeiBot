@@ -41,8 +41,9 @@ def fake_manager(monkeypatch):
     return manager
 
 
-def test_install_skill_registered_with_discipline() -> None:
-    assert "install_skill" in TOOL_REGISTRY
+def test_all_skill_tools_registered() -> None:
+    for name in ("install_skill", "uninstall_skill", "list_skills"):
+        assert name in TOOL_REGISTRY
     assert "不要用 shell" in TOOL_REGISTRY["install_skill"].description
 
 
@@ -78,3 +79,35 @@ def test_install_skill_manager_error(fake_manager) -> None:
 def test_install_skill_os_error(fake_manager) -> None:
     fake_manager.install_error = OSError("disk full")
     assert "安装失败" in skill_tools.install_skill("owner/repo")
+
+
+def test_uninstall_skill_success(fake_manager) -> None:
+    assert skill_tools.uninstall_skill("docx") == "已卸载技能 docx"
+
+
+def test_uninstall_skill_missing_slug_arg(fake_manager) -> None:
+    assert "缺少技能注册名" in skill_tools.uninstall_skill("  ")
+
+
+def test_uninstall_skill_not_found(fake_manager) -> None:
+    fake_manager.uninstall_result = False
+    assert "没有名为" in skill_tools.uninstall_skill("ghost")
+
+
+def test_uninstall_skill_error(fake_manager) -> None:
+    fake_manager.uninstall_error = SkillManagerError("非法 slug")
+    assert "卸载失败" in skill_tools.uninstall_skill("../x")
+
+
+def test_list_skills_empty(fake_manager) -> None:
+    assert skill_tools.list_skills() == "当前没有安装任何技能"
+
+
+def test_list_skills_rows(fake_manager) -> None:
+    fake_manager.rows = [
+        {"slug": "docx", "source": "owner/repo", "enabled": 1, "files_ok": True},
+        {"slug": "ai-news", "source": "owner/repo2", "enabled": 0, "files_ok": False},
+    ]
+    result = skill_tools.list_skills()
+    assert "docx(启用,文件完整) — owner/repo" in result
+    assert "ai-news(停用,文件缺失) — owner/repo2" in result

@@ -67,6 +67,36 @@ def install_skill(source: str = "") -> str:
     return f"安装成功:slug={slug},文件数={file_count},位置={target}"
 
 
+def uninstall_skill(slug: str = "") -> str:
+    """卸载技能:删库记录 + 删目录。"""
+    slug = slug.strip()
+    if not slug:
+        return "缺少技能注册名(args 里传 slug)。"
+    try:
+        removed = skill_manager.uninstall(slug)
+    except (SkillManagerError, OSError) as exc:
+        return f"卸载失败:{exc}"
+    if removed:
+        return f"已卸载技能 {slug}"
+    return f"没有名为「{slug}」的技能"
+
+
+def list_skills() -> str:
+    """列出已安装技能。"""
+    try:
+        rows = skill_manager.list()
+    except Exception as exc:  # noqa: BLE001 — 与其他工具一致,不让异常漏到模型
+        return f"查看技能失败:{exc}"
+    if not rows:
+        return "当前没有安装任何技能"
+    lines = []
+    for row in rows:
+        state = "启用" if row["enabled"] else "停用"
+        files = "文件完整" if row["files_ok"] else "文件缺失"
+        lines.append(f"{row['slug']}({state},{files}) — {row['source']}")
+    return "\n".join(lines)
+
+
 register_tool(ToolSpec(
     name="install_skill",
     description=(
@@ -75,4 +105,16 @@ register_tool(ToolSpec(
     ),
     parameters={"source": "技能来源:GitHub URL/tree、raw SKILL.md、zip、平台 slug 或 owner/repo"},
     handler=install_skill,
+))
+register_tool(ToolSpec(
+    name="uninstall_skill",
+    description="卸载技能。当用户要求卸载/删除/移除某个已安装的技能时使用此工具",
+    parameters={"slug": "技能注册名(安装时返回的 slug)"},
+    handler=uninstall_skill,
+))
+register_tool(ToolSpec(
+    name="list_skills",
+    description="列出已安装的技能。当用户询问装了哪些技能/技能列表时使用此工具",
+    parameters={},
+    handler=list_skills,
 ))
