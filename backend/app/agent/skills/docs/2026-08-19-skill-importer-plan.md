@@ -2348,6 +2348,26 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 3. StaffDeck 全量测试通过，行为与文案等价（HTML 拒绝/平台下载端点/owner-repo/slug 去重等原断言逐条保留）。
 4. 两份文档（spec + plan）均已提交 feibot。
 
+---
+
+## 定稿后修正记录（2026-08-20，代码以下列条目为准）
+
+实施完成并经 self-review / maintainer review 后，下列行为与结构相对本计划文档发生了变更；
+如与上文代码块冲突，以本节为准。
+
+1. **测试结构**：`from conftest import ...` 已废弃，测试辅助（`make_zip`/`files_dict`）迁至
+   `tests/_helpers.py`；fixtures（`make_importer`/`importer`）留在 `conftest.py`。
+   `pyproject.toml` 新增 `[tool.pytest.ini_options]`（`testpaths`/`pythonpath`），兼容 `--import-mode=importlib`。
+2. **GitHub 分支解析**：blob/raw/tree 支持含 `/` 的分支名（如 `feature/x`）——先查分支列表 API
+   取最长匹配前缀；owner/repo 简写的默认分支探测优先用 repo API 的 `default_branch`，`main/master` 仅作回退。
+3. **zip 超限语义**：`files_from_zip` 超 `max_files`/总字节时抛 `ERROR_TOO_LARGE`（不再静默丢弃
+   SKILL.md 后误报 `SKILL_MD_MISSING`）；`SKILL.md` 提到队首优先解压。非 zip 字节映射 `ERROR_PACKAGE_INVALID`。
+4. **HTML 提取**：仅跟随具技能亲和性的链接（raw GitHub / 平台下载端点 / tree / blob / zip）；
+   移除"任意第一个 URL"兜底，无候选时抛 `ERROR_HTML_NOT_SKILL`。
+5. **下载安全**：下载前 Content-Length 预检；SSRF 守卫对"任一非公网 DNS 应答"即拒绝（README 标注 best-effort）。
+6. **元数据**：`SkillPackage.source_kind` 实际取值 `platform | github | url`（docstring 已对齐，不含 shorthand/upload）。
+
+
 
 
 
