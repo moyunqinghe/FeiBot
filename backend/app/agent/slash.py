@@ -28,7 +28,7 @@ def parse_command(text: str) -> ChannelCommand | None:
     name, _, rest = body.partition(" ")
     name = name.lower()
     query = rest.strip()
-    if name in {"帮助", "help", "?", "?"}:
+    if name in {"帮助", "help", "?"}:
         return ChannelCommand(kind="help", query=query)
     if name == "ping":
         return ChannelCommand(kind="ping", query=query)

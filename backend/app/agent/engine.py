@@ -25,11 +25,11 @@ from app.agent.memory.distill import distill_memory
 from app.agent.memory.store import MemoryStore
 from app.agent.profile import profile_summary, reset_profile
 from app.agent.session.session import get_or_create
+from app.agent.skills.manager import SkillManager, SkillManagerError
 from app.agent.slash import ChannelCommand, parse_command
 from app.agent.tools import execute_tool_call, parse_tool_call, render_tools_prompt
 from app.agent.tools.mcp_plugins import PluginError, plugin_manager
 from app.agent.tools.registry import TOOL_REGISTRY
-from app.agent.skills.manager import SkillManager, SkillManagerError
 from app.config import SKILLS_DIR, is_tool_admin
 from app.db import store
 from app.db.skill_store import SqliteSkillStore
