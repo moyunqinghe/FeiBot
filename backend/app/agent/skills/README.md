@@ -11,10 +11,12 @@ zip URL、owner/repo 简写。
 
 ## 安装
 
+以下命令在仓库根目录执行（`<repo>` 为本仓库 checkout 路径）：
+
 ```bash
-pip install /Users/moyunqinghe/个人/学习/feibot/backend/app/agent/skills
-pip install -e /Users/moyunqinghe/个人/学习/feibot/backend/app/agent/skills   # 调试
-pip install "/Users/moyunqinghe/个人/学习/feibot/backend/app/agent/skills[test]"  # 含测试依赖
+pip install <repo>/backend/app/agent/skills
+pip install -e <repo>/backend/app/agent/skills   # 调试
+pip install "<repo>/backend/app/agent/skills[test]"  # 含测试依赖
 ```
 
 ## 快速上手
@@ -26,7 +28,7 @@ importer = SkillImporter()          # 全默认
 pkg = importer.import_skill("weather-pack")                          # 开源平台 slug
 pkg = importer.import_skill("owner/repo/tree/main/skills/weather")   # GitHub tree
 pkg = importer.import_skill("https://raw.githubusercontent.com/owner/repo/main/SKILL.md")
-pkg = importer.import_skill("owner/repo")                            # 自动探测 main/master
+pkg = importer.import_skill("owner/repo")                            # 默认分支自动探测
 
 for file in pkg.files:
     print(file.path, len(file.content))
@@ -57,8 +59,9 @@ PACKAGE_INVALID / SKILL_MD_MISSING / HTML_NOT_SKILL / REDIRECT_LOOP / GITHUB_API
 
 ## 运行测试
 
+在 `<repo>/backend/app/agent/skills` 目录执行（`python` 指向装有依赖的环境，如仓库 venv）：
+
 ```bash
-cd /Users/moyunqinghe/个人/学习/feibot/backend/app/agent/skills
-/Users/moyunqinghe/个人/学习/feibot/backend/.venv/bin/python -m pytest tests/
+python -m pytest tests/ -q
 ```
 全部离线运行：纯函数 + httpx.MockTransport，不发真实网络请求。
