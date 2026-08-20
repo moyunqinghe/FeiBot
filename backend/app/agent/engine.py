@@ -18,6 +18,7 @@ import re
 
 from llm_protocols import LLMError, ProtocolCallError, loads_llm_json
 from mcp_discovery import McpDiscoveryError
+from skill_importer import SkillImporterError
 
 from app.agent.context.assemble import assemble_context
 from app.agent.memory.distill import distill_memory
@@ -28,12 +29,17 @@ from app.agent.slash import ChannelCommand, parse_command
 from app.agent.tools import execute_tool_call, parse_tool_call, render_tools_prompt
 from app.agent.tools.mcp_plugins import PluginError, plugin_manager
 from app.agent.tools.registry import TOOL_REGISTRY
-from app.config import is_tool_admin
+from app.agent.skills.manager import SkillManager, SkillManagerError
+from app.config import SKILLS_DIR, is_tool_admin
 from app.db import store
+from app.db.skill_store import SqliteSkillStore
 from app.llm import registry
 from app.llm.client import EchoLLM, build_active_client
 
 logger = logging.getLogger(__name__)
+
+# skill 宿主管理器:基座 SkillManager + sqlite 持久化 + 运行时目录
+skill_manager = SkillManager(SqliteSkillStore(), SKILLS_DIR)
 
 # 单条消息内的工具调用轮次上限,防模型陷入调用循环
 TOOL_MAX_ROUNDS = 3
@@ -79,6 +85,10 @@ HELP_TEXT = (
     "/mcp add <名称> <url> - 装入 MCP 插件\n"
     "/mcp remove <名称> - 卸下 MCP 插件\n"
     "/mcp enable|disable <名称> - 启用/停用 MCP 插件\n"
+    "/skill(/skill list) - 列出已装技能(仅管理员)\n"
+    "/skill add <来源> - 装入技能\n"
+    "/skill remove <slug> - 卸下技能\n"
+    "/skill enable|disable <slug> - 启用/停用技能\n"
     "其他消息直接发给助理。"
 )
 
@@ -89,6 +99,8 @@ def _handle_command(conv_key: str, cmd: ChannelCommand) -> str:
     """本地应答 slash 指令。"""
     if cmd.kind == "mcp":
         return _handle_mcp(conv_key, cmd.query)
+    if cmd.kind == "skill":
+        return _handle_skill(conv_key, cmd.query)
     if cmd.kind == "ping":
         return "pong"
     if cmd.kind == "model":
@@ -224,6 +236,100 @@ def _mcp_disable(arg: str) -> str:
     if plugin_manager.disable(name):
         return f"已停用插件 {name}(配置保留,/mcp enable 可恢复)。"
     return f"没有名为「{name}」的插件,/mcp 查看已装插件。"
+
+
+SKILL_HELP = (
+    "用法:\n"
+    "/skill 或 /skill list - 列出已装技能\n"
+    "/skill add <来源> - 装入技能(GitHub URL/tree、raw SKILL.md、zip、平台 slug)\n"
+    "/skill remove <slug> - 卸下技能\n"
+    "/skill enable <slug> 或 /skill disable <slug> - 启用/停用技能"
+)
+
+
+def _handle_skill(conv_key: str, query: str) -> str:
+    """/skill:管理已安装技能(仅管理员)。list/add/remove/enable/disable。"""
+    if not is_tool_admin(conv_key):
+        return "Skill 管理仅限管理员使用。"
+    sub, _, arg = query.partition(" ")
+    sub = sub.lower().strip()
+    arg = arg.strip()
+    if sub in {"", "list"}:
+        return _skill_list()
+    if sub == "add":
+        return _skill_add(arg)
+    if sub == "remove":
+        return _skill_remove(arg)
+    if sub == "enable":
+        return _skill_enable(arg)
+    if sub == "disable":
+        return _skill_disable(arg)
+    return SKILL_HELP
+
+
+def _skill_list() -> str:
+    try:
+        rows = skill_manager.list()
+    except Exception as exc:  # noqa: BLE001 — 与其他子命令一致,不让异常漏到渠道
+        return f"查看技能失败:{exc}"
+    if not rows:
+        return f"还没有安装技能。\n{SKILL_HELP}"
+    lines = ["已装技能(* 为启用):"]
+    for row in rows:
+        mark = "*" if row["enabled"] else " "
+        state = "" if row["files_ok"] else "(文件缺失)"
+        lines.append(f"{mark} {row['slug']}{state} — {row['source']}")
+    return "\n".join(lines)
+
+
+def _skill_add(arg: str) -> str:
+    source = arg.strip()
+    if not source:
+        return "用法:/skill add <来源>"
+    try:
+        slug = skill_manager.install(source)
+    except (SkillImporterError, SkillManagerError, OSError) as exc:
+        return f"安装失败:{exc}"
+    return f"已装入技能 {slug}。"
+
+
+def _skill_remove(arg: str) -> str:
+    slug = arg.strip()
+    if not slug:
+        return "用法:/skill remove <slug>"
+    try:
+        removed = skill_manager.uninstall(slug)
+    except SkillManagerError as exc:
+        return f"卸载失败:{exc}"
+    if removed:
+        return f"已卸下技能 {slug}。"
+    return f"没有名为「{slug}」的技能,/skill 查看已装技能。"
+
+
+def _skill_enable(arg: str) -> str:
+    slug = arg.strip()
+    if not slug:
+        return "用法:/skill enable <slug>"
+    try:
+        enabled = skill_manager.enable(slug)
+    except SkillManagerError as exc:
+        return f"启用失败:{exc}"
+    if enabled:
+        return f"已启用技能 {slug}。"
+    return f"没有名为「{slug}」的技能,/skill 查看已装技能。"
+
+
+def _skill_disable(arg: str) -> str:
+    slug = arg.strip()
+    if not slug:
+        return "用法:/skill disable <slug>"
+    try:
+        disabled = skill_manager.disable(slug)
+    except SkillManagerError as exc:
+        return f"停用失败:{exc}"
+    if disabled:
+        return f"已停用技能 {slug}(文件保留,/skill enable 可恢复)。"
+    return f"没有名为「{slug}」的技能,/skill 查看已装技能。"
 
 
 def _generate_reply(client, messages: list[dict], tools_available: bool) -> str:

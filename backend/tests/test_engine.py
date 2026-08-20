@@ -8,9 +8,9 @@ from llm_protocols import ProtocolCallError
 from llm_protocols.client import LLMClient as ProtocolLLMClient
 from mcp_discovery import McpDiscoveryError
 
-from app.agent import engine
-from app.agent import profile
+from app.agent import engine, profile
 from app.agent.memory.store import MemoryStore
+from app.agent.skills.manager import SkillManagerError
 from app.db import store
 from app.llm import registry
 
@@ -210,3 +210,52 @@ def test_mcp_disable_missing(monkeypatch) -> None:
 def test_mcp_add_bad_url_scheme(monkeypatch) -> None:
     monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
     assert "http:// 或 https://" in engine.handle_message("conv-1", "/mcp add foo not-a-url")
+
+
+def test_help_mentions_skill_command() -> None:
+    assert "/skill" in engine.handle_message("conv-1", "/帮助")
+
+
+def test_skill_denied_for_non_admin(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: False)
+    assert "仅限管理员" in engine.handle_message("conv-1", "/skill list")
+
+
+def test_skill_list_empty_for_admin(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    assert "还没有安装技能" in engine.handle_message("conv-1", "/skill")
+
+
+def test_skill_add_and_remove_flow(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    monkeypatch.setattr(engine.skill_manager, "install", lambda source: "daily-ai-news")
+    reply = engine.handle_message("conv-1", "/skill add owner/repo")
+    assert "已装入技能 daily-ai-news" in reply
+    monkeypatch.setattr(engine.skill_manager, "uninstall", lambda slug: True)
+    reply = engine.handle_message("conv-1", "/skill remove daily-ai-news")
+    assert "已卸下技能 daily-ai-news" in reply
+
+
+def test_skill_add_missing_args_shows_usage(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    assert "用法" in engine.handle_message("conv-1", "/skill add")
+
+
+def test_skill_add_invalid_package_shows_message(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+
+    def boom(source: str) -> str:
+        raise SkillManagerError("SKILL.md 缺少 frontmatter name")
+
+    monkeypatch.setattr(engine.skill_manager, "install", boom)
+    assert "安装失败" in engine.handle_message("conv-1", "/skill add owner/repo")
+
+
+def test_skill_enable_disable_flow(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+    monkeypatch.setattr(engine.skill_manager, "enable", lambda slug: True)
+    reply = engine.handle_message("conv-1", "/skill enable daily-ai-news")
+    assert "已启用技能 daily-ai-news" in reply
+    monkeypatch.setattr(engine.skill_manager, "disable", lambda slug: True)
+    reply = engine.handle_message("conv-1", "/skill disable daily-ai-news")
+    assert "已停用技能 daily-ai-news" in reply
