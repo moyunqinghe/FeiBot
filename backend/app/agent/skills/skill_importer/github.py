@@ -84,9 +84,12 @@ def load_github_source(parsed, *, http: _Http, config: _Config) -> list[SkillFil
             errors.append(exc)
     try:
         return _download_github_archive(http, config, owner, repo, branches, subtree)
-    except SkillImporterError:
-        # archive 兜底失败时优先抛目录遍历阶段的原始错误（如 SKILL_MD_MISSING）
-        raise errors[0] if errors else None
+    except SkillImporterError as archive_error:
+        # archive 兜底失败时优先抛目录遍历阶段的原始错误（如 SKILL_MD_MISSING）；
+        # 目录阶段无错误（理论上不会发生）则抛 archive 自身错误，避免 raise None
+        if errors:
+            raise errors[0] from archive_error
+        raise
 
 
 def _candidate_default_branches(http: _Http, owner: str, repo: str) -> list[str]:
