@@ -1,1 +1,1 @@
-"""skill 层:发现并列出项目根 skills/ 目录下的 skill。"""
+"""feibot 的 skill 导入适配与运行时发现层。"""
