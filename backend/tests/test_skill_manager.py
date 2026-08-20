@@ -7,6 +7,7 @@ import shutil
 import pytest
 from skill_importer import SkillFile, SkillImporterError, SkillPackage
 
+from app.agent.skills.loader import list_skills
 from app.agent.skills.manager import SkillManager, SkillManagerError
 
 
@@ -222,3 +223,13 @@ def test_install_rejects_path_traversal(tmp_path) -> None:
         manager.install("owner/repo")
     assert store_.get("daily-ai-news") is None
     assert not (tmp_path / "evil.py").exists()
+
+
+def test_install_then_loader_discovers(tmp_path) -> None:
+    """端到端串联:安装落盘后,发现原语能列出该 skill。"""
+    skills_dir = tmp_path / "skills"
+    manager = SkillManager(FakeStore(), skills_dir, importer=FakeImporter(_make_package()))
+
+    slug = manager.install("owner/repo")
+
+    assert list_skills(skills_dir) == [slug]
