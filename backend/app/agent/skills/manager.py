@@ -113,7 +113,12 @@ def _validated_slug(package: SkillPackage) -> str:
 
 
 def _write_package(target: Path, package: SkillPackage) -> None:
-    """整目录清除后写入包内文件(避免旧版本残留)。"""
+    """先校验全部路径,再整目录清除并写入(避免旧版本残留);拒绝越界路径。"""
+    target_abs = target.resolve()
+    for file in package.files:
+        dest = (target / file.path).resolve()
+        if not dest.is_relative_to(target_abs):
+            raise SkillManagerError(f"安装包含非法路径:{file.path!r},整包拒绝。")
     if target.exists():
         shutil.rmtree(target)
     for file in package.files:

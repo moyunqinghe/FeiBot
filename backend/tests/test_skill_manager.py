@@ -208,3 +208,17 @@ def test_list_reports_rows_with_filesystem_state(tmp_path) -> None:
     (row,) = manager.list()
     assert row["files_ok"] is False
     assert row["file_count"] == 0
+
+
+def test_install_rejects_path_traversal(tmp_path) -> None:
+    package = _make_package(files=[
+        ("SKILL.md", "---\nname: daily-ai-news\n---\n\n# t\n"),
+        ("../evil.py", "print('escape')\n"),
+    ])
+    store_ = FakeStore()
+    manager = SkillManager(store_, tmp_path / "skills", importer=FakeImporter(package))
+
+    with pytest.raises(SkillManagerError, match="非法路径"):
+        manager.install("owner/repo")
+    assert store_.get("daily-ai-news") is None
+    assert not (tmp_path / "evil.py").exists()
