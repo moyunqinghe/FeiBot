@@ -7,6 +7,12 @@ from types import SimpleNamespace
 from llm_protocols import ProtocolCallError
 from llm_protocols.client import LLMClient as ProtocolLLMClient
 from mcp_discovery import McpDiscoveryError
+from skill_importer import (
+    ERROR_HTTP_ERROR,
+    ERROR_SKILL_MD_MISSING,
+    ERROR_TIMEOUT,
+    SkillImporterError,
+)
 
 from app.agent import engine, profile
 from app.agent.memory.store import MemoryStore
@@ -249,6 +255,40 @@ def test_skill_add_invalid_package_shows_message(monkeypatch) -> None:
 
     monkeypatch.setattr(engine.skill_manager, "install", boom)
     assert "安装失败" in engine.handle_message("conv-1", "/skill add owner/repo")
+
+
+def test_skill_add_http_error_gives_friendly_hint(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+
+    def boom(source: str) -> str:
+        raise SkillImporterError("download failed with HTTP 404", code=ERROR_HTTP_ERROR)
+
+    monkeypatch.setattr(engine.skill_manager, "install", boom)
+    reply = engine.handle_message("conv-1", "/skill add owner/repo")
+    assert "无法访问或不存在" in reply
+    assert "404" in reply
+
+
+def test_skill_add_timeout_gives_friendly_hint(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+
+    def boom(source: str) -> str:
+        raise SkillImporterError("download timed out", code=ERROR_TIMEOUT)
+
+    monkeypatch.setattr(engine.skill_manager, "install", boom)
+    assert "超时" in engine.handle_message("conv-1", "/skill add owner/repo")
+
+
+def test_skill_add_missing_skill_md_gives_friendly_hint(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "is_tool_admin", lambda conv_key: True)
+
+    def boom(source: str) -> str:
+        raise SkillImporterError(
+            "GitHub directory does not contain SKILL.md", code=ERROR_SKILL_MD_MISSING
+        )
+
+    monkeypatch.setattr(engine.skill_manager, "install", boom)
+    assert "SKILL.md" in engine.handle_message("conv-1", "/skill add owner/repo")
 
 
 def test_skill_enable_disable_flow(monkeypatch) -> None:

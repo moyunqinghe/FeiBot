@@ -18,7 +18,19 @@ import re
 
 from llm_protocols import LLMError, ProtocolCallError, loads_llm_json
 from mcp_discovery import McpDiscoveryError
-from skill_importer import SkillImporterError
+from skill_importer import (
+    ERROR_CONNECT_FAILED,
+    ERROR_GITHUB_API_ERROR,
+    ERROR_HTML_NOT_SKILL,
+    ERROR_HTTP_ERROR,
+    ERROR_PACKAGE_INVALID,
+    ERROR_REDIRECT_LOOP,
+    ERROR_SKILL_MD_MISSING,
+    ERROR_SOURCE_INVALID,
+    ERROR_TIMEOUT,
+    ERROR_TOO_LARGE,
+    SkillImporterError,
+)
 
 from app.agent.context.assemble import assemble_context
 from app.agent.memory.distill import distill_memory
@@ -288,9 +300,31 @@ def _skill_add(arg: str) -> str:
         return "用法:/skill add <来源>"
     try:
         slug = skill_manager.install(source)
-    except (SkillImporterError, SkillManagerError, OSError) as exc:
+    except SkillImporterError as exc:
+        return _friendly_import_error(exc)
+    except (SkillManagerError, OSError) as exc:
         return f"安装失败:{exc}"
     return f"已装入技能 {slug}。"
+
+
+_IMPORT_ERROR_HINTS = {
+    ERROR_TIMEOUT: "下载超时,请稍后重试。",
+    ERROR_CONNECT_FAILED: "连接来源失败,请检查网络后重试。",
+    ERROR_TOO_LARGE: "技能包过大,已拒绝下载。",
+    ERROR_SKILL_MD_MISSING: "该目录不是有效的技能包(缺少 SKILL.md)。",
+    ERROR_HTML_NOT_SKILL: "链接指向的内容不是技能包。",
+    ERROR_REDIRECT_LOOP: "来源重定向次数过多,已拒绝。",
+    ERROR_SOURCE_INVALID: "无法识别的来源,请检查链接或 slug 是否正确。",
+    ERROR_PACKAGE_INVALID: "技能包内容非法,已拒绝。",
+    ERROR_GITHUB_API_ERROR: "GitHub API 返回异常,请稍后重试。",
+}
+
+
+def _friendly_import_error(exc: SkillImporterError) -> str:
+    """把协议层错误码翻译成对用户有行动指引的文案。"""
+    if exc.code == ERROR_HTTP_ERROR:
+        return f"来源链接无法访问或不存在,请检查仓库名与路径是否拼写正确({exc})。"
+    return _IMPORT_ERROR_HINTS.get(exc.code, f"安装失败:{exc}")
 
 
 def _skill_remove(arg: str) -> str:
