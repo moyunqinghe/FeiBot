@@ -12,9 +12,8 @@
 - `app/llm/` — LLM 层:`client.py` 对上层只暴露 `generate(messages)`(经 `llm_protocols/` 通用协议包真实调用,无配置回退 EchoLLM);`registry.py` 管模型配置存取/加解密;`manage.py` 是配置 CLI;`llm_protocols/` 为独立协议包(勿改)
 - `app/db/` — sqlite 持久化:kv 表(渠道 token/游标、当前模型)+ sessions 表 + model_configs 表 + messages 表(会话历史)
 - `app/jobs/` — 后台任务层(占位:outbox 投递、定时任务)
-- `skills/` — 项目根级 skill 内容目录(每个子目录一个 SKILL.md)
 - `USER.md` — 用户画像,由助理根据对话自动维护(见下)
-- `.feibot/` — 运行时数据目录(sqlite 库),不进 git
+- `.feibot/` — 运行时数据目录，不进 git；sqlite 数据库位于 `.feibot/feibot.db`，已安装 Skill 位于 `.feibot/skills/<skill-id>/`
 - `tests/` — 回归测试
 
 依赖方向:`channels` → `agent` → `llm` / `db`;agent 层零渠道依赖,engine 返回文本、ingress 负责分片发送。
