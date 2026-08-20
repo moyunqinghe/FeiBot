@@ -1,7 +1,6 @@
 import dataclasses
 
 import pytest
-
 from skill_importer import SkillFile, SkillPackage
 
 

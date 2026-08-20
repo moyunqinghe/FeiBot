@@ -9,7 +9,6 @@ from html import unescape
 from urllib.parse import quote, unquote, urljoin, urlparse
 
 import httpx
-
 from skill_importer.errors import (
     ERROR_CONNECT_FAILED,
     ERROR_GITHUB_API_ERROR,
@@ -94,9 +93,8 @@ class _Http:
                     f"download failed with HTTP {response.status_code}", code=ERROR_HTTP_ERROR
                 )
             content_length = response.headers.get("content-length")
-            if content_length and content_length.isdigit():
-                if int(content_length) > self._config.max_package_bytes:
-                    raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)
+            if content_length and content_length.isdigit() and int(content_length) > self._config.max_package_bytes:
+                raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)
             data = response.content
             if len(data) > self._config.max_package_bytes:
                 raise SkillImporterError("skill package is too large", code=ERROR_TOO_LARGE)

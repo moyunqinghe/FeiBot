@@ -1,7 +1,6 @@
 import httpx
 import pytest
 from _helpers import make_zip
-
 from skill_importer import (
     ERROR_PACKAGE_INVALID,
     ERROR_SKILL_MD_MISSING,

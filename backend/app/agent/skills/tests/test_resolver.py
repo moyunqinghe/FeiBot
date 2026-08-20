@@ -1,8 +1,8 @@
+import socket
+
 import httpx
 import pytest
-import socket
 from _helpers import files_dict, make_zip
-
 from skill_importer import (
     ERROR_CONNECT_FAILED,
     ERROR_HTML_NOT_SKILL,
