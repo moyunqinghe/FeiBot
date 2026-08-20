@@ -18,40 +18,25 @@ import re
 
 from llm_protocols import LLMError, ProtocolCallError, loads_llm_json
 from mcp_discovery import McpDiscoveryError
-from skill_importer import (
-    ERROR_CONNECT_FAILED,
-    ERROR_GITHUB_API_ERROR,
-    ERROR_HTML_NOT_SKILL,
-    ERROR_HTTP_ERROR,
-    ERROR_PACKAGE_INVALID,
-    ERROR_REDIRECT_LOOP,
-    ERROR_SKILL_MD_MISSING,
-    ERROR_SOURCE_INVALID,
-    ERROR_TIMEOUT,
-    ERROR_TOO_LARGE,
-    SkillImporterError,
-)
+from skill_importer import SkillImporterError
 
 from app.agent.context.assemble import assemble_context
 from app.agent.memory.distill import distill_memory
 from app.agent.memory.store import MemoryStore
 from app.agent.profile import profile_summary, reset_profile
 from app.agent.session.session import get_or_create
-from app.agent.skills.manager import SkillManager, SkillManagerError
+from app.agent.skills.manager import SkillManagerError
 from app.agent.slash import ChannelCommand, parse_command
 from app.agent.tools import execute_tool_call, parse_tool_call, render_tools_prompt
 from app.agent.tools.mcp_plugins import PluginError, plugin_manager
 from app.agent.tools.registry import TOOL_REGISTRY
-from app.config import SKILLS_DIR, is_tool_admin
+from app.agent.tools.skill_tools import friendly_import_error, skill_manager
+from app.config import is_tool_admin
 from app.db import store
-from app.db.skill_store import SqliteSkillStore
 from app.llm import registry
 from app.llm.client import EchoLLM, build_active_client
 
 logger = logging.getLogger(__name__)
-
-# skill 宿主管理器:基座 SkillManager + sqlite 持久化 + 运行时目录
-skill_manager = SkillManager(SqliteSkillStore(), SKILLS_DIR)
 
 # 单条消息内的工具调用轮次上限,防模型陷入调用循环
 TOOL_MAX_ROUNDS = 3
@@ -101,6 +86,7 @@ HELP_TEXT = (
     "/skill add <来源> - 装入技能\n"
     "/skill remove <slug> - 卸下技能\n"
     "/skill enable|disable <slug> - 启用/停用技能\n"
+    "安装技能也可以直接发:安装这个skill:<链接>(仅管理员)\n"
     "其他消息直接发给助理。"
 )
 
@@ -301,30 +287,10 @@ def _skill_add(arg: str) -> str:
     try:
         slug = skill_manager.install(source)
     except SkillImporterError as exc:
-        return _friendly_import_error(exc)
+        return friendly_import_error(exc)
     except (SkillManagerError, OSError) as exc:
         return f"安装失败:{exc}"
     return f"已装入技能 {slug}。"
-
-
-_IMPORT_ERROR_HINTS = {
-    ERROR_TIMEOUT: "下载超时,请稍后重试。",
-    ERROR_CONNECT_FAILED: "连接来源失败,请检查网络后重试。",
-    ERROR_TOO_LARGE: "技能包过大,已拒绝下载。",
-    ERROR_SKILL_MD_MISSING: "该目录不是有效的技能包(缺少 SKILL.md)。",
-    ERROR_HTML_NOT_SKILL: "链接指向的内容不是技能包。",
-    ERROR_REDIRECT_LOOP: "来源重定向次数过多,已拒绝。",
-    ERROR_SOURCE_INVALID: "无法识别的来源,请检查链接或 slug 是否正确。",
-    ERROR_PACKAGE_INVALID: "技能包内容非法,已拒绝。",
-    ERROR_GITHUB_API_ERROR: "GitHub API 返回异常,请稍后重试。",
-}
-
-
-def _friendly_import_error(exc: SkillImporterError) -> str:
-    """把协议层错误码翻译成对用户有行动指引的文案。"""
-    if exc.code == ERROR_HTTP_ERROR:
-        return f"来源链接无法访问或不存在,请检查仓库名与路径是否拼写正确({exc})。"
-    return _IMPORT_ERROR_HINTS.get(exc.code, f"安装失败:{exc}")
 
 
 def _skill_remove(arg: str) -> str:

@@ -299,3 +299,7 @@ def test_skill_enable_disable_flow(monkeypatch) -> None:
     monkeypatch.setattr(engine.skill_manager, "disable", lambda slug: True)
     reply = engine.handle_message("conv-1", "/skill disable daily-ai-news")
     assert "已停用技能 daily-ai-news" in reply
+
+
+def test_help_mentions_nl_skill_install() -> None:
+    assert "安装这个skill" in engine.handle_message("conv-1", "/帮助")
