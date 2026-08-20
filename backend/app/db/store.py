@@ -1,4 +1,4 @@
-"""sqlite 持久化:kv / sessions / model_configs / messages / mcp_plugins。
+"""sqlite 持久化:kv / sessions / model_configs / messages / mcp_plugins / installed_skills。
 
 只用标准库 sqlite3;每次调用新开连接,简单且对当前单线程轮询足够。
 """
@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE TABLE IF NOT EXISTS mcp_plugins (
     name        TEXT PRIMARY KEY,
     config_json TEXT NOT NULL,
+    enabled     INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+    added_at    REAL NOT NULL,
+    updated_at  REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS installed_skills (
+    slug        TEXT PRIMARY KEY,
+    source      TEXT NOT NULL,
+    source_kind TEXT NOT NULL,
     enabled     INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
     added_at    REAL NOT NULL,
     updated_at  REAL NOT NULL
@@ -241,4 +249,70 @@ def _plugin_row_to_dict(row: tuple) -> dict:
         "enabled": row[2],
         "added_at": row[3],
         "updated_at": row[4],
+    }
+
+
+# ---- 已安装 skill(installed_skills 表;slug == SKILL.md frontmatter name)----
+
+
+def upsert_skill(slug: str, source: str, source_kind: str, enabled: int) -> None:
+    """写入已安装 skill(同 slug 覆盖);首次写入记 added_at,每次刷新 updated_at。"""
+    now = time.time()
+    with _connect() as conn:
+        conn.execute(
+            "INSERT INTO installed_skills (slug, source, source_kind, enabled, added_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(slug) DO UPDATE SET"
+            " source = excluded.source, source_kind = excluded.source_kind,"
+            " enabled = excluded.enabled, updated_at = excluded.updated_at",
+            (slug, source, source_kind, enabled, now, now),
+        )
+
+
+def get_skill(slug: str) -> dict | None:
+    """按 slug 取 skill 行(dict);不存在返回 None。"""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT slug, source, source_kind, enabled, added_at, updated_at"
+            " FROM installed_skills WHERE slug = ?",
+            (slug,),
+        ).fetchone()
+    return _skill_row_to_dict(row) if row else None
+
+
+def list_skills() -> list[dict]:
+    """列出全部已安装 skill 行(按 slug 排序)。"""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT slug, source, source_kind, enabled, added_at, updated_at"
+            " FROM installed_skills ORDER BY slug"
+        ).fetchall()
+    return [_skill_row_to_dict(row) for row in rows]
+
+
+def delete_skill(slug: str) -> bool:
+    """删除 skill 行;返回是否确实删掉了行。"""
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM installed_skills WHERE slug = ?", (slug,))
+        return cur.rowcount > 0
+
+
+def set_skill_enabled(slug: str, enabled: int) -> bool:
+    """切换 skill 启用状态;返回是否命中已有行。"""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE installed_skills SET enabled = ?, updated_at = ? WHERE slug = ?",
+            (enabled, time.time(), slug),
+        )
+        return cur.rowcount > 0
+
+
+def _skill_row_to_dict(row: tuple) -> dict:
+    return {
+        "slug": row[0],
+        "source": row[1],
+        "source_kind": row[2],
+        "enabled": row[3],
+        "added_at": row[4],
+        "updated_at": row[5],
     }
