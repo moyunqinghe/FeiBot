@@ -12,7 +12,7 @@ COMMAND_PREFIX = "/"
 
 @dataclass
 class ChannelCommand:
-    kind: str  # help/ping/model/memory/forget/mcp
+    kind: str  # help/ping/model/memory/forget/mcp/skill
     query: str = ""  # 指令后的剩余文本(可为空)
 
 
@@ -40,5 +40,7 @@ def parse_command(text: str) -> ChannelCommand | None:
         return ChannelCommand(kind="forget", query=query)
     if name == "mcp":
         return ChannelCommand(kind="mcp", query=query)
+    if name == "skill":
+        return ChannelCommand(kind="skill", query=query)
     # 未识别的指令按帮助处理,引导用户看可用指令
     return ChannelCommand(kind="help", query=body)

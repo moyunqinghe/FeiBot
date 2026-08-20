@@ -78,3 +78,17 @@ def test_mcp_command_add_with_args() -> None:
     assert cmd is not None
     assert cmd.kind == "mcp"
     assert cmd.query == "add foo http://x/mcp"
+
+
+def test_skill_command_no_args() -> None:
+    cmd = parse_command("/skill")
+    assert cmd is not None
+    assert cmd.kind == "skill"
+    assert cmd.query == ""
+
+
+def test_skill_command_add_with_args() -> None:
+    cmd = parse_command("/skill add owner/repo/tree/main/skills/x")
+    assert cmd is not None
+    assert cmd.kind == "skill"
+    assert cmd.query == "add owner/repo/tree/main/skills/x"
