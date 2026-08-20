@@ -1,6 +1,7 @@
 """installed_skills 表与 SqliteSkillStore 适配器的回归测试。"""
 
 from app.db import store
+from app.db.skill_store import SqliteSkillStore
 
 
 def test_upsert_and_get_skill():
@@ -60,3 +61,22 @@ def test_skill_upsert_preserves_added_and_bumps_updated(monkeypatch):
     second = store.get_skill("s1")
     assert second["added_at"] == first["added_at"]
     assert second["updated_at"] > first["updated_at"]
+
+
+def test_sqlite_skill_store_roundtrip():
+    s = SqliteSkillStore()
+    s.upsert("daily-ai-news", "owner/repo", "github", 1)
+    row = s.get("daily-ai-news")
+    assert row["source"] == "owner/repo"
+    assert [r["slug"] for r in s.list()] == ["daily-ai-news"]
+    assert s.set_enabled("daily-ai-news", 0) is True
+    assert s.get("daily-ai-news")["enabled"] == 0
+    assert s.delete("daily-ai-news") is True
+    assert s.get("daily-ai-news") is None
+
+
+def test_sqlite_skill_store_missing_rows():
+    s = SqliteSkillStore()
+    assert s.get("nope") is None
+    assert s.delete("nope") is False
+    assert s.set_enabled("nope", 1) is False
