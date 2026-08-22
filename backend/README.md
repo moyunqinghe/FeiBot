@@ -61,7 +61,7 @@ plugin_manager.list(); plugin_manager.disable("12306-mcp"); plugin_manager.unins
 
 管理员可在微信里用 `/skill` 系列指令管理技能：`/skill` 或 `/skill list` 查看已装技能，`/skill add <来源>` 装入（来源支持 GitHub URL/tree、raw SKILL.md、zip、平台 slug），`/skill remove <slug>` 卸下，`/skill enable|disable <slug>` 启停。非管理员不可用。
 
-管理员也可以直接说自然语言：「安装这个skill：<链接>」「把 <slug> 卸载了」「装了哪些技能」——模型会调用内置工具 `install_skill` / `uninstall_skill` / `list_skills` 完成（工具说明含纪律约束，禁止模型用 shell 自行下载技能内容）。未配置模型时请改用 `/skill` 指令。
+管理员也可以直接说自然语言：「安装这个skill：<链接>」「把 <slug> 卸载了」「装了哪些技能」——模型会调用内置工具 `install_skill` / `uninstall_skill` / `list_skills` 完成（工具说明含纪律约束，禁止模型用 shell 自行下载技能内容）。未配置模型时请改用 `/skill` 指令。可选环境变量 `FEIBOT_GITHUB_TOKEN`（GitHub 认证 token，匿名 API 仅 60 次/小时，配置后避免导入撞限流；token 只经环境变量注入，不进仓库）。
 
 ## 模型配置
 

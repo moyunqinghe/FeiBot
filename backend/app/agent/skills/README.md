@@ -109,6 +109,7 @@ pip install "<repo>/backend/app/agent/skills[test]"  # 含测试依赖
 from skill_importer import SkillImporter, SkillImporterError
 
 importer = SkillImporter()          # 全默认
+importer = SkillImporter(github_token="ghp_...")  # 可选:认证提升 GitHub API 配额(匿名 60 次/小时)
 pkg = importer.import_skill("weather-pack")                          # 开源平台 slug
 pkg = importer.import_skill("owner/repo/tree/main/skills/weather")   # GitHub tree
 pkg = importer.import_skill("https://raw.githubusercontent.com/owner/repo/main/SKILL.md")
@@ -139,7 +140,8 @@ print(pkg.skill_markdown, pkg.slug_hint, pkg.name_hint)
 
 统一 `SkillImporterError(message, *, code, cause)`，code 取值：
 `SOURCE_INVALID / HTTP_ERROR / CONNECT_FAILED / TIMEOUT / TOO_LARGE /
-PACKAGE_INVALID / SKILL_MD_MISSING / HTML_NOT_SKILL / REDIRECT_LOOP / GITHUB_API_ERROR`
+PACKAGE_INVALID / SKILL_MD_MISSING / HTML_NOT_SKILL / REDIRECT_LOOP / GITHUB_API_ERROR /
+RATE_LIMITED`（GitHub API 限流：重试或配置 `github_token` 提升配额）
 
 ## 运行测试
 
