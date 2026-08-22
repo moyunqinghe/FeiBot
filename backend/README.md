@@ -14,6 +14,7 @@
 - `app/jobs/` — 后台任务层(占位:outbox 投递、定时任务)
 - `USER.md` — 用户画像,由助理根据对话自动维护(见下)
 - `.feibot/` — 运行时数据目录，不进 git；sqlite 数据库位于 `.feibot/feibot.db`，已安装 Skill 位于 `.feibot/skills/<slug>/`
+- `.env` — 本机机密（如 `FEIBOT_GITHUB_TOKEN`），不进 git；真实环境变量优先于 .env
 - `tests/` — 回归测试
 
 依赖方向:`channels` → `agent` → `llm` / `db`;agent 层零渠道依赖,engine 返回文本、ingress 负责分片发送。
@@ -61,7 +62,7 @@ plugin_manager.list(); plugin_manager.disable("12306-mcp"); plugin_manager.unins
 
 管理员可在微信里用 `/skill` 系列指令管理技能：`/skill` 或 `/skill list` 查看已装技能，`/skill add <来源>` 装入（来源支持 GitHub URL/tree、raw SKILL.md、zip、平台 slug），`/skill remove <slug>` 卸下，`/skill enable|disable <slug>` 启停。非管理员不可用。
 
-管理员也可以直接说自然语言：「安装这个skill：<链接>」「把 <slug> 卸载了」「装了哪些技能」——模型会调用内置工具 `install_skill` / `uninstall_skill` / `list_skills` 完成（工具说明含纪律约束，禁止模型用 shell 自行下载技能内容）。未配置模型时请改用 `/skill` 指令。可选环境变量 `FEIBOT_GITHUB_TOKEN`（GitHub 认证 token，匿名 API 仅 60 次/小时，配置后避免导入撞限流；token 只经环境变量注入，不进仓库）。
+管理员也可以直接说自然语言：「安装这个skill：<链接>」「把 <slug> 卸载了」「装了哪些技能」——模型会调用内置工具 `install_skill` / `uninstall_skill` / `list_skills` 完成（工具说明含纪律约束，禁止模型用 shell 自行下载技能内容）。未配置模型时请改用 `/skill` 指令。可选 `FEIBOT_GITHUB_TOKEN`（GitHub 认证 token，匿名 API 仅 60 次/小时，配置后避免导入撞限流）：写在 `backend/.env` 里即可（该文件在 .gitignore 中，绝不进仓库；真实环境变量优先）。新项目复刻时不必沿用 .env 机制——基座 `skill-importer` 只认显式参数 `SkillImporter(github_token=...)`，凭据来源由宿主自定。
 
 ## 模型配置
 

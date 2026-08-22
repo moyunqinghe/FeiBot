@@ -16,3 +16,6 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+
+# 机密(token 等),绝不进 git
+.env

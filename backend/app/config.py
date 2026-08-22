@@ -13,10 +13,32 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # backend/
 DATA_DIR = BASE_DIR / ".feibot"  # 运行时数据目录(sqlite 库等),不进 git
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def _load_dotenv(path: Path | None = None) -> None:
+    """把 backend/.env 的 KEY=VALUE 载入环境变量(标准库实现,不引新依赖)。
+
+    真实环境变量优先:已存在的键不覆盖;.env 本身在 .gitignore 里,不进仓库。
+    """
+    path = path if path is not None else BASE_DIR / ".env"
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip().removeprefix("export ").strip()
+        value = value.strip().strip("'\"")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv()
+
 SKILLS_DIR = DATA_DIR / "skills"  # 已安装 skill 运行时目录,不进 git
 
 # GitHub 认证 token(可选):匿名 API 仅 60 次/小时,配置后提升到认证配额,
-# 避免 skill 导入撞限流。token 只经环境变量注入,不进仓库。
+# 避免 skill 导入撞限流。来源:真实环境变量优先,其次 backend/.env;不进仓库。
 GITHUB_TOKEN = os.environ.get("FEIBOT_GITHUB_TOKEN", "")
 
 # 渠道 token 落地加密的密钥
