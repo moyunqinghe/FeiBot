@@ -8,11 +8,15 @@ from llm_protocols.client import LLMClient as ProtocolLLMClient
 
 from app import config
 from app.agent import engine
-from app.agent.tools import builtin, parse_tool_call, execute_tool_call, render_tools_prompt
+from app.agent.tools import (
+    builtin,
+    execute_tool_call,
+    parse_tool_call,
+    render_tools_prompt,
+)
 from app.agent.tools.calls import ToolCall
 from app.db import store
 from app.llm import registry
-
 
 # ---- parse_tool_call ----
 
@@ -229,3 +233,33 @@ def test_clean_final_reply_keeps_user_requested_example() -> None:
     text = '示例:{"tool": "shell", "args": {}}'
     assert engine._clean_final_reply(text) == text
 
+
+
+
+def test_parse_native_name_arguments_format() -> None:
+    # 模型原生 function calling 风格:{"name": 工具名, "arguments": {...}}
+    call = parse_tool_call('{"name": "shell", "arguments": {"command": "ls"}}')
+    assert call == ToolCall("shell", {"command": "ls"})
+
+
+
+def test_parse_native_format_in_tool_call_tags() -> None:
+    # 真实事故形态:原生格式包在 tool_call 标签里(与微信实测一致)
+    text = (
+        "<tool_call> "
+        '{"name": "install_skill", "arguments": {"source": "owner/repo"}}'
+        "</tool_call>"
+    )
+    call = parse_tool_call(text)
+    assert call == ToolCall("install_skill", {"source": "owner/repo"})
+
+
+
+def test_parse_native_format_unregistered_is_none() -> None:
+    assert parse_tool_call('{"name": "ghost-tool", "arguments": {}}') is None
+
+
+
+def test_parse_native_format_bad_args_coerced_to_empty() -> None:
+    call = parse_tool_call('{"name": "pwd", "arguments": "不是字典"}')
+    assert call is not None and call.args == {}

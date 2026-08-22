@@ -1,10 +1,12 @@
 """工具调用的解析与执行:模型输出 JSON -> ToolCall -> 执行 -> 结果文本。
 
-解析约定:文本里存在一个配平的 JSON 对象、含 "tool" 键且工具名已注册,
-即认定为调用——哪怕模型把调用和编造的"结果"一起输出成多段 JSON,
-也能把真正的调用识别出来(编造部分直接丢弃,真实结果由 engine 回填)。
-非注册工具名不视为调用(防止把用户要的 JSON 示例误当调用执行)。
-执行层的任何错误都转成结果文本回填给模型,不炸主流程。
+解析约定:文本里存在一个配平的 JSON 对象,且能按三种格式之一
+({"tool","args"} 约定式 / qwen 嵌套 trace / OpenAI 风格 "name","arguments")
+解析出已注册的工具名,即认定为调用——哪怕模型把调用和编造的"结果"一起
+输出成多段 JSON,也能把真正的调用识别出来(编造部分直接丢弃,真实结果
+由 engine 回填)。非注册工具名不视为调用(防止把用户要的 JSON 示例或
+注入文本误当调用执行)。执行层的任何错误都转成结果文本回填给模型,
+不炸主流程。
 """
 
 from __future__ import annotations
@@ -61,12 +63,14 @@ def _iter_json_objects(text: str) -> Iterator[str]:
 
 
 def _from_dict(data: dict) -> ToolCall | None:
-    """把一个 JSON 对象识别为工具调用;两种格式都只认已注册的工具名。
+    """把一个 JSON 对象识别为工具调用;三种格式都只认已注册的工具名。
 
     1. 约定格式:{"tool": 工具名, "args": {...}}
     2. qwen 系模型的原生 trace 格式(偶尔泄漏到正文):
        {"name": "tool_call", "arguments": {"name": 工具名, "arguments": {...}}}
        ({"name": "tool_result", ...} 是模型编造的结果,直接忽略)
+    3. OpenAI 风格原生 function calling 格式(模型训练习惯,常无视提示词约定):
+       {"name": 工具名, "arguments": {...}}
     """
     name = str(data.get("tool") or "").strip()
     if name and get_tool(name) is not None:
@@ -86,6 +90,14 @@ def _from_dict(data: dict) -> ToolCall | None:
                     name=inner_name,
                     args={str(k): str(v) for k, v in inner_args.items()},
                 )
+    native_name = str(data.get("name") or "").strip()
+    if native_name and native_name != "tool_call" and get_tool(native_name) is not None:
+        raw_args = data.get("arguments") or {}
+        if not isinstance(raw_args, dict):
+            raw_args = {}
+        return ToolCall(
+            name=native_name, args={str(k): str(v) for k, v in raw_args.items()}
+        )
     return None
 
 
@@ -100,7 +112,7 @@ def parse_tool_call(text: str | None) -> ToolCall | None:
     for candidate in [text, *_iter_json_objects(text)]:
         try:
             data = loads_llm_json(candidate)
-        except Exception:  # noqa: BLE001 — 该候选不是合法 JSON,试下一个
+        except Exception:  # noqa: BLE001, S112 — 该候选不是合法 JSON,试下一个
             continue
         if isinstance(data, dict):
             call = _from_dict(data)
