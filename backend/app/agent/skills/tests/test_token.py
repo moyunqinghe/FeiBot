@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import httpx
 import pytest
-
 from skill_importer import ERROR_RATE_LIMITED, SkillImporter, SkillImporterError
 
 
