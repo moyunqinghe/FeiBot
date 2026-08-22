@@ -15,6 +15,10 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 SKILLS_DIR = DATA_DIR / "skills"  # 已安装 skill 运行时目录,不进 git
 
+# GitHub 认证 token(可选):匿名 API 仅 60 次/小时,配置后提升到认证配额,
+# 避免 skill 导入撞限流。token 只经环境变量注入,不进仓库。
+GITHUB_TOKEN = os.environ.get("FEIBOT_GITHUB_TOKEN", "")
+
 # 渠道 token 落地加密的密钥
 CHANNEL_SECRET = os.environ.get("FEIBOT_CHANNEL_SECRET", "feibot-dev-secret")
 

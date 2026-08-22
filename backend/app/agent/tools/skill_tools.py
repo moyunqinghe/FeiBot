@@ -15,21 +15,28 @@ from skill_importer import (
     ERROR_HTML_NOT_SKILL,
     ERROR_HTTP_ERROR,
     ERROR_PACKAGE_INVALID,
+    ERROR_RATE_LIMITED,
     ERROR_REDIRECT_LOOP,
     ERROR_SKILL_MD_MISSING,
     ERROR_SOURCE_INVALID,
     ERROR_TIMEOUT,
     ERROR_TOO_LARGE,
+    SkillImporter,
     SkillImporterError,
 )
 
 from app.agent.skills.manager import SkillManager, SkillManagerError
 from app.agent.tools.registry import ToolSpec, register_tool
-from app.config import SKILLS_DIR
+from app.config import GITHUB_TOKEN, SKILLS_DIR
 from app.db.skill_store import SqliteSkillStore
 
-# skill 宿主管理器:基座 SkillManager + sqlite 持久化 + 运行时目录
-skill_manager = SkillManager(SqliteSkillStore(), SKILLS_DIR)
+# skill 宿主管理器:基座 SkillManager + sqlite 持久化 + 运行时目录。
+# 配置了 FEIBOT_GITHUB_TOKEN 时注入认证,避免匿名 API 限流(60 次/小时)。
+skill_manager = SkillManager(
+    SqliteSkillStore(),
+    SKILLS_DIR,
+    importer=SkillImporter(github_token=GITHUB_TOKEN or None),
+)
 
 _IMPORT_ERROR_HINTS = {
     ERROR_TIMEOUT: "下载超时,请稍后重试。",
@@ -41,6 +48,10 @@ _IMPORT_ERROR_HINTS = {
     ERROR_SOURCE_INVALID: "无法识别的来源,请检查链接或 slug 是否正确。",
     ERROR_PACKAGE_INVALID: "技能包内容非法,已拒绝。",
     ERROR_GITHUB_API_ERROR: "GitHub API 返回异常,请稍后重试。",
+    ERROR_RATE_LIMITED: (
+        "GitHub API 限流(匿名仅 60 次/小时),请过几分钟重试,"
+        "或设置环境变量 FEIBOT_GITHUB_TOKEN 提升配额。"
+    ),
 }
 
 

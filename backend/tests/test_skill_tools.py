@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from skill_importer import ERROR_HTTP_ERROR, ERROR_TIMEOUT, SkillImporterError
+from skill_importer import (
+    ERROR_HTTP_ERROR,
+    ERROR_RATE_LIMITED,
+    ERROR_TIMEOUT,
+    SkillImporterError,
+)
 
 from app.agent.skills.manager import SkillManagerError
 from app.agent.tools import skill_tools
@@ -69,6 +74,13 @@ def test_install_skill_importer_error_friendly(fake_manager) -> None:
 def test_install_skill_timeout_friendly(fake_manager) -> None:
     fake_manager.install_error = SkillImporterError("timed out", code=ERROR_TIMEOUT)
     assert "超时" in skill_tools.install_skill("owner/repo")
+
+
+def test_install_skill_rate_limited_friendly(fake_manager) -> None:
+    fake_manager.install_error = SkillImporterError("rate limited", code=ERROR_RATE_LIMITED)
+    result = skill_tools.install_skill("owner/repo")
+    assert "限流" in result
+    assert "FEIBOT_GITHUB_TOKEN" in result
 
 
 def test_install_skill_manager_error(fake_manager) -> None:
