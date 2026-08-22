@@ -14,6 +14,7 @@ from skill_importer.errors import (
     ERROR_GITHUB_API_ERROR,
     ERROR_HTML_NOT_SKILL,
     ERROR_HTTP_ERROR,
+    ERROR_RATE_LIMITED,
     ERROR_REDIRECT_LOOP,
     ERROR_SOURCE_INVALID,
     ERROR_TIMEOUT,
@@ -55,6 +56,7 @@ class _Config:
     max_file_bytes: int
     max_files: int
     max_indirections: int
+    github_token: str | None
 
 
 class _Http:
@@ -70,10 +72,14 @@ class _Http:
         current = url
         for _ in range(self.MAX_REDIRECTS + 1):
             _assert_public_target(current)
+            headers = {"User-Agent": self._config.user_agent}
+            # token 只发给 GitHub API:raw/codeload 不需要也不应携带凭据
+            if self._config.github_token and urlparse(current).hostname == "api.github.com":
+                headers["Authorization"] = f"Bearer {self._config.github_token}"
             try:
                 response = self._client.get(
                     current,
-                    headers={"User-Agent": self._config.user_agent},
+                    headers=headers,
                     follow_redirects=False,
                 )
             except httpx.TimeoutException as exc:
@@ -89,6 +95,12 @@ class _Http:
                 current = urljoin(current, location)
                 continue
             if response.status_code >= 400:
+                if response.status_code in {403, 429} and b"rate limit" in response.content.lower():
+                    raise SkillImporterError(
+                        "GitHub API rate limit exceeded; retry later or pass"
+                        " github_token for an authenticated (higher) limit",
+                        code=ERROR_RATE_LIMITED,
+                    )
                 raise SkillImporterError(
                     f"download failed with HTTP {response.status_code}", code=ERROR_HTTP_ERROR
                 )
@@ -132,6 +144,7 @@ class SkillImporter:
         max_file_bytes: int = 2 * 1024 * 1024,
         max_files: int = 240,
         max_indirections: int = 5,
+        github_token: str | None = None,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
         self._config = _Config(
@@ -144,6 +157,7 @@ class SkillImporter:
             max_file_bytes=max_file_bytes,
             max_files=max_files,
             max_indirections=max_indirections,
+            github_token=github_token,
         )
         self._client = httpx.Client(
             timeout=timeout_seconds, follow_redirects=False, transport=transport
